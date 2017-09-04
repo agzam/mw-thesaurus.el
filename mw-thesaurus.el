@@ -53,7 +53,7 @@
             <fl>noun</fl>
             <sens>
               <mc>a person who impartially decides or resolves a dispute or controversy</mc>
-              <vi>usually acts as <it>umpire</it> in the all-too-frequent squabbles between the two other roommates</vi>
+              <vi>usually acts as <it>umpire</it> in the <it> umpire-yo </it> all-too-frequent squabbles between the two other roommates</vi>
               <syn>adjudicator, arbiter, arbitrator, referee, umpire</syn>
               <rel>jurist, justice, magistrate; intermediary, intermediate, mediator, mediatrix, moderator, negotiator; conciliator, go-between, peacemaker, reconciler, troubleshooter; decider</rel>
             </sens>
@@ -86,22 +86,49 @@
         (get-xml-node (car current-node) (cdr path))
       current-node)))
 
+(defun mw-thesaurus/get-title (entry)
+  (-> (get-xml-node entry '(term hw))
+      car (seq-drop 2) car))
 
-(get-xml-node data '(entry term hw))
+(defun mw-thesaurus/get-type (entry)
+  (-> (get-xml-node entry '(fl))
+      car (seq-drop 2) car))
 
-(get-xml-node (car (mw-thesaurus/get-entires data)) '(term))
+(defun mw-thesaurus/snd-level (entry)
+  (let* ((desc (-> (get-xml-node entry '(sens mc))
+                   car (seq-drop 2) car)))
+    (concat "** " desc)))
 
+(defun mw-thesaurus/snd-subs (entry)
+  (let* ((whole-sub (-> entry
+                        (get-xml-node '(sens vi))
+                        car (seq-drop 2)))
+         (its (-> entry (get-xml-node '(sens vi it))))
+         (sub-str (mapconcat (lambda (e) (if (member e its)
+                                     (concat "/" (-> e last car string-trim) "/")
+                                   e)) whole-sub "")))
+    (concat "   - " sub-str)))
 
-(mapcar (lambda (e)
-          (get-xml-node e '(sens rel)))
-        (mw-thesaurus/get-entires data))
+(defun mw-thesaurus/text ()
+  (mapconcat
+   (lambda (entry)
+     (let* ((fst-level (concat "* " (mw-thesaurus/get-title entry)
+                               " [" (mw-thesaurus/get-type entry) "]"))
+            (snd-level (mw-thesaurus/snd-level entry))
+            (snd-subs (mw-thesaurus/snd-subs entry)))
+       (string-join (list fst-level snd-level snd-subs) "\n")))
+   (mw-thesaurus/get-entires data) "\n"))
 
-;; (mapcar (lambda (e)
-;;           (car (last (car (xml-get-children
-;;                            (car (xml-get-children e 'term))
-;;                            'hw)))))
-;;         (mw-thesaurus/get-entires data))
+(defun mw-thesaurus/lookup ()
+  (let* ((org-entry )
+         (temp-buf  (generate-new-buffer "* Thesaurus *")))
+    (set-buffer temp-buf)
+    (with-current-buffer temp-buf
+      (funcall 'org-mode)
+      (insert (mw-thesaurus/text)))
+    (switch-to-buffer-other-window temp-buf)))
 
+(mw-thesaurus/lookup)
 
 (let* ((entry-list (assq 'entry_list data))
        (entries (xml-get-children entry-list 'entry)))
