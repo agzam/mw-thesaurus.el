@@ -242,8 +242,13 @@
     (set-buffer temp-buf)
     (with-current-buffer temp-buf
       (funcall 'org-mode)
-      (insert (mw-thesaurus/text data)))
+      (insert (decode-coding-string (mw-thesaurus/text data) 'dos)))
     (switch-to-buffer-other-window temp-buf)))
+
+;; (let* ((xml (with-temp-buffer
+;;               (insert test-data)
+;;               (xml-parse-region (point-min) (point-max)))))
+;;   (mw-thesaurus/text xml))
 
 (defun mw-thesaurus/lookup-at-point ()
   (interactive)
