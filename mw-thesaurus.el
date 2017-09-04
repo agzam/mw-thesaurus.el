@@ -36,5 +36,79 @@
 ;;
 ;;; Code:
 
+(require 'request nil t)
+
+(defcustom mw-thesaurus--api-key "67d977d5-790b-412e-a547-9dbcc2bcd525")
+
+(defcustom mw-thesaurus--base-url "http://www.dictionaryapi.com/api/v1/references/thesaurus/xml/")
+
+(defvar data
+  (let* ((xml "
+        <?xml version=\"1.0\" encoding=\"utf-8\"?>
+        <entry_list version=\"1.0\">
+          <entry id=\"umpire\">
+            <term>
+              <hw>umpire</hw>
+            </term>
+            <fl>noun</fl>
+            <sens>
+              <mc>a person who impartially decides or resolves a dispute or controversy</mc>
+              <vi>usually acts as <it>umpire</it> in the all-too-frequent squabbles between the two other roommates</vi>
+              <syn>adjudicator, arbiter, arbitrator, referee, umpire</syn>
+              <rel>jurist, justice, magistrate; intermediary, intermediate, mediator, mediatrix, moderator, negotiator; conciliator, go-between, peacemaker, reconciler, troubleshooter; decider</rel>
+            </sens>
+          </entry>
+          <entry id=\"umpire\">
+            <term>
+              <hw>umpire</hw>
+            </term>
+            <fl>verb</fl>
+            <sens>
+              <mc>to give an opinion about (something at issue or in dispute)</mc>
+              <vi>in our family disputes regarding the use of our home entertainment system are <it>umpired</it> by Dad</vi>
+              <syn>adjudge, adjudicate, arbitrate, decide, determine, referee, rule (on), settle, umpire</syn>
+              <rel>consider, deem, deliberate, hear, ponder, weigh; size up; mediate, moderate, negotiate; prosecute, try; find (for <it>or</it> against); conclude, resolve; redetermine, rejudge</rel>
+              <near>equivocate, hedge, pussyfoot, skirt</near>
+            </sens>
+          </entry>
+        </entry_list>"))
+      (with-temp-buffer
+        (insert xml)
+        (xml-parse-region (point-min) (point-max)))))
+
+(defun mw-thesaurus/get-entires (tree)
+  (let* ((entry-list (assq 'entry_list tree)))
+      (xml-get-children entry-list 'entry)))
+
+(defun get-xml-node (root path)
+  (let* ((current-node (xml-get-children root (car path))))
+    (if (< 1 (length path))
+        (get-xml-node (car current-node) (cdr path))
+      current-node)))
+
+
+(get-xml-node data '(entry term hw))
+
+(get-xml-node (car (mw-thesaurus/get-entires data)) '(term))
+
+
+(mapcar (lambda (e)
+          (get-xml-node e '(sens rel)))
+        (mw-thesaurus/get-entires data))
+
+;; (mapcar (lambda (e)
+;;           (car (last (car (xml-get-children
+;;                            (car (xml-get-children e 'term))
+;;                            'hw)))))
+;;         (mw-thesaurus/get-entires data))
+
+
+(let* ((entry-list (assq 'entry_list data))
+       (entries (xml-get-children entry-list 'entry)))
+  (while entries
+    (print (car entries))
+    (print "\n")
+    (setq entries (cdr entries))))
+
 
 (provide 'mw-thesaurus)
