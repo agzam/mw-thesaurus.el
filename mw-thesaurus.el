@@ -109,15 +109,29 @@
                                    e)) whole-sub "")))
     (concat "   - " sub-str)))
 
+(defun mw-thesaurus/other-tag (entry tag-type)
+  (let* ((content (-> entry
+                        (get-xml-node `(sens ,tag-type))
+                        car (seq-drop 2))))
+    (car content)))
+
 (defun mw-thesaurus/text ()
   (mapconcat
    (lambda (entry)
      (let* ((fst-level (concat "* " (mw-thesaurus/get-title entry)
                                " [" (mw-thesaurus/get-type entry) "]"))
             (snd-level (mw-thesaurus/snd-level entry))
-            (snd-subs (mw-thesaurus/snd-subs entry)))
-       (string-join (list fst-level snd-level snd-subs) "\n")))
-   (mw-thesaurus/get-entires data) "\n"))
+            (snd-subs (mw-thesaurus/snd-subs entry))
+            (syns (string-join (list "*** Synonyms:\n    " (mw-thesaurus/other-tag entry 'syn)) ""))
+            (rels (string-join (list "*** Related words:\n    " (mw-thesaurus/other-tag entry 'rel)) ""))
+            (nears (string-join (list "*** Near antonyms:\n    " (mw-thesaurus/other-tag entry 'near)) ""))
+            (ants (string-join (list "*** Antonyms:\n    " (mw-thesaurus/other-tag entry 'ant)) "")))
+       (string-join (list fst-level snd-level snd-subs
+                          syns rels nears ants) "\n")))
+   (mw-thesaurus/get-entires data) "\n\n"))
+
+
+(string-join (list "**Syns: " (mw-thesaurus/other-tag (car (mw-thesaurus/get-entires data)) 'syn)) "")
 
 (defun mw-thesaurus/lookup ()
   (let* ((org-entry )
