@@ -134,14 +134,15 @@ returns multi-line text in org-mode format"
         (message (concat "Sadly, Merriam-Webster doesn't seem to have anything for " word))
       (let* ((buffer-name "* Thesaurus *")
              (temp-buf (get-buffer-create buffer-name)))
+        (print temp-buf)
         (set-buffer temp-buf)
+        (switch-to-buffer-other-window temp-buf)
         (with-current-buffer temp-buf
           (setf (buffer-string) "")
           (funcall 'org-mode)
           (insert (decode-coding-string dict-str 'dos))
           (goto-char (point-min))
-          (read-only-mode))
-        (switch-to-buffer-other-window temp-buf)))))
+          (read-only-mode))))))
 
 (defun mw-thesaurus/lookup-at-point ()
   "looks up a thesaurus definition for word at point
