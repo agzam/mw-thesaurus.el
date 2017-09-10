@@ -1,0 +1,16 @@
+* Merriam-Webster Thesaurus
+  For more than 150 years, in print and now online, Merriam-Webster has been America's leading and most-trusted provider of language information.
+
+  This package allows you to lookup a word and display its thesaurus definition in a nice Org-mode format
+* Install
+* Configure
+  In order to use Merriam Webster API it is required to obtain an API Key.
+  By default this package is using my key, if for whatever reason you rather use your own key or the default key stops working:
+  - [[https://www.dictionaryapi.com/register/index.htm][Register free account]] at Merriam-Webster's Developer Center
+  - Obtain a key for Merriam-Webster Thesaurus
+  - Set the variable
+  #+begin_src emacs-lisp
+    (setq mw-thesaurus--api-key "YOUR-API-KEY")
+  #+end_src
+* Commands
+  ~mw-thesaurus/lookup-at-point~ - bind that to any desired hotkey
