@@ -35,58 +35,49 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;;; Code:
-
-(require 'request nil t)
-
+
+(require 'request)
+(require 'thingatpt)
+(require 'xml)
+
 (defcustom mw-thesaurus--api-key
   "67d977d5-790b-412e-a547-9dbcc2bcd525"
   "Merriam-Webster API access key")
-
+
 (defcustom mw-thesaurus--base-url
   "http://www.dictionaryapi.com/api/v1/references/thesaurus/xml/"
   "Merriam-Webster API base URL")
-
-
-
-(defun mw-thesaurus--get-entires (tree)
-  "merriam-webster api returns xml that looks like this
-`'"
-
-  (let* ((entry-list (assq 'entry_list tree)))
-      (xml-get-children entry-list 'entry)))
-
+
 (defun get-xml-node (root path)
+  "From parsed XML retrieves a node
+
+Usage: `(get-xml-node html-root '(html head title))`"
   (let* ((current-node (xml-get-children root (car path))))
     (if (< 1 (length path))
         (get-xml-node (car current-node) (cdr path))
       current-node)))
-
-(defun mw-thesaurus/get-title (entry)
-  (-> (get-xml-node entry '(term hw))
-      car (seq-drop 2) car))
-
-(defun mw-thesaurus/get-type (entry)
-  (-> (get-xml-node entry '(fl))
-      car (seq-drop 2) car))
-
-(defun mw-thesaurus/italicize (prop)
-  (let* ((its      (get-xml-node prop '(it))))
-    (mapconcat (lambda (e)
-                 (if (member e its)
-                     (concat "/" (-> e last car string-trim) "/")
-                   (when (stringp e ) e))) prop "")))
-
-(defun mw-thesaurus/snd-subs (article)
+
+(defun mw-thesaurus--italicize (prop)
+  "Checks if the element contains <it> tag, retrieves content, resulting string is placed between '/' and '/'"
+  (let* ((its (get-xml-node prop '(it))))
+    (mapconcat
+     (lambda (e)
+       (if (member e its)
+           (concat "/" (-> e last car string-trim) "/")
+         (when (stringp e ) e)))
+     prop "")))
+
+(defun mw-thesaurus--snd-subs (article)
   (let* ((whole-sub (-> article
                         (get-xml-node '(vi)) car))
-         (sub-str (mw-thesaurus/italicize whole-sub)))
+         (sub-str (mw-thesaurus--italicize whole-sub)))
     (concat "   - " sub-str)))
-
-(defun mw-thesaurus/other-tag (article tag-type)
+
+(defun mw-thesaurus--other-tag (article tag-type)
   (let* ((content (-> article
                         (get-xml-node `(,tag-type))
                         car
-                        mw-thesaurus/italicize))
+                        mw-thesaurus--italicize))
          (title (cond
                  ((eq tag-type 'syn) "Synonyms")
                  ((eq tag-type 'rel) "Related words")
@@ -95,37 +86,48 @@
                  (t "Unknown type"))))
     (when (and content (< 0 (length content)))
       (string-join (list "\n*** " title ":\n    " (s-replace ";" "\n   " content)) ""))))
-
-(defun mw-thesaurus/third-lvl (article)
-  (let* ((syns (mw-thesaurus/other-tag article 'syn))
-         (rels (mw-thesaurus/other-tag article 'rel))
-         (nears (mw-thesaurus/other-tag article 'near))
-         (ants (mw-thesaurus/other-tag article 'ant)))
+
+(defun mw-thesaurus--third-lvl (article)
+  (let* ((syns (mw-thesaurus--other-tag article 'syn))
+         (rels (mw-thesaurus--other-tag article 'rel))
+         (nears (mw-thesaurus--other-tag article 'near))
+         (ants (mw-thesaurus--other-tag article 'ant)))
     (string-join (list syns rels nears ants) "")))
-
-(defun mw-thesaurus/snd-level (entry)
+
+(defun mw-thesaurus--snd-level (entry)
   (let ((articles (get-xml-node entry '(sens))))
     (mapconcat
      (lambda (article)
        (let* ((desc (-> (get-xml-node article '(mc))
-                       car mw-thesaurus/italicize))
-              (snd-subs (mw-thesaurus/snd-subs article))
-              (third-lvl (mw-thesaurus/third-lvl article)))
-         (string-join (list "** " desc "\n"
-                            snd-subs third-lvl) "")))
-     articles "\n")))
-
+                       car
+                       mw-thesaurus--italicize))
+              (snd-subs (mw-thesaurus--snd-subs article))
+              (third-lvl (mw-thesaurus--third-lvl article)))
+         (string-join (list "** " desc "\n" snd-subs third-lvl) "")))
+     articles
+     "\n")))
+
+(defun mw-thesaurus--get-title (entry)
+  (-> (get-xml-node entry '(term hw))
+      car (seq-drop 2) car))
+
+(defun mw-thesaurus--get-type (entry)
+  (-> (get-xml-node entry '(fl))
+      car (seq-drop 2) car))
+
 (defun mw-thesaurus--parse (xml-data)
   "Parses XML returned by Merriam-Webster dictionary API,
 returns multi-line text in org-mode format"
-  (mapconcat
-   (lambda (entry)
-     (let* ((fst-level (concat "* " (mw-thesaurus/get-title entry)
-                               " [" (mw-thesaurus/get-type entry) "]\n"))
-            (snd-level (mw-thesaurus/snd-level entry)))
-       (string-join (list fst-level snd-level) "")))
-   (mw-thesaurus--get-entires xml-data) ""))
-
+  (let* ((entry-list (assq 'entry_list xml-data))
+         (entries (xml-get-children entry-list 'entry)))
+      (mapconcat
+       (lambda (entry)
+         (let* ((fst-level (concat "* " (mw-thesaurus--get-title entry)
+                                   " [" (mw-thesaurus--get-type entry) "]\n"))
+                (snd-level (mw-thesaurus--snd-level entry)))
+           (string-join (list fst-level snd-level) "")))
+       entries "")))
+
 (defun mw-thesaurus--create-buffer (word data)
   (let ((dict-str (mw-thesaurus--parse data)))
     (if (< (length dict-str) 1)
@@ -137,9 +139,10 @@ returns multi-line text in org-mode format"
           (setf (buffer-string) "")
           (funcall 'org-mode)
           (insert (decode-coding-string dict-str 'dos))
-          (goto-char (point-min)))
+          (goto-char (point-min))
+          (read-only-mode))
         (switch-to-buffer-other-window temp-buf)))))
-
+
 (defun mw-thesaurus/lookup-at-point ()
   "looks up a thesaurus definition for word at point
 using Merriam-Webster online dictionary"
@@ -152,6 +155,6 @@ using Merriam-Webster online dictionary"
      :parser (lambda () (xml-parse-region (point-min) (point-max)))
      :success (cl-function
                (lambda (&key data &allow-other-keys)
-                 (mw-thesaurus--create-buffer word data))))))k
-
+                 (mw-thesaurus--create-buffer word data))))))
+
 (provide 'mw-thesaurus)
