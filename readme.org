@@ -15,5 +15,7 @@
   #+begin_src emacs-lisp
     (setq mw-thesaurus--api-key "YOUR-API-KEY")
   #+end_src
+
+  Spacemacs users can easily add the package to ~dotspacemacs-additional-packages~ and start using it, or even add it to be part of a custom layer, [[https://github.com/agzam/dot-spacemacs/tree/master/layers/mw-thesaurus][see an example]].
 * Commands
   ~mw-thesaurus/lookup-at-point~ - bind that to any desired hotkey
