@@ -126,7 +126,7 @@ returns multi-line text in org-mode format"
                                    " [" (mw-thesaurus--get-type entry) "]\n"))
                 (snd-level (mw-thesaurus--snd-level entry)))
            (string-join (list fst-level snd-level) "")))
-       entries "")))
+       entries "\n")))
 
 (defun mw-thesaurus--create-buffer (word data)
   (let ((dict-str (mw-thesaurus--parse data)))
