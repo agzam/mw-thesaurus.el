@@ -11,11 +11,11 @@
 
 (ert-deftest mw-thesaurus--parse-test ()
   (let* ((xml (with-temp-buffer
-                (insert-file-contents "./sample.xml")
+                (insert-file-contents "./assets/sample.xml")
                 (xml-parse-region (point-min) (point-max))))
          (parsed-org-text (mw-thesaurus--parse xml))
          (expected-org-text (string-trim (with-temp-buffer
-                                           (insert-file-contents "./sample.org")
+                                           (insert-file-contents "./assets/sample.org")
                                            (buffer-string)))))
     (string= expected-org-text parsed-org-text)))
 
@@ -28,7 +28,7 @@
 
 (ert-deftest mw-thesaurus--correct-number-of-entries-test ()
     (let* ((xml (with-temp-buffer
-               (insert-file-contents "./sample.xml")
+               (insert-file-contents "./assets/sample.xml")
                (xml-parse-region (point-min) (point-max))))
         (entry-list (assq 'entry_list xml))
         (entries (xml-get-children entry-list 'entry)))

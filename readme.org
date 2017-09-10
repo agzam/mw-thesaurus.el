@@ -2,6 +2,9 @@
   For more than 150 years, in print and now online, Merriam-Webster has been America's leading and most-trusted provider of language information.
 
   This package allows you to lookup a word and display its thesaurus definition in a nice Org-mode format
+
+[[file:assets/thesaurus.gif]]
+
 * Install
 * Configure
   In order to use Merriam Webster API it is required to obtain an API Key.
