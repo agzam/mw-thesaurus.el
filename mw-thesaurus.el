@@ -40,6 +40,27 @@
 (require 'thingatpt)
 (require 'xml)
 
+(defgroup mw-thesaurus nil
+  "Merriam-Webster Thesaurus"
+  :prefix "mw-thesaurus-"
+  :group 'applications)
+
+(defvar mw-thesaurus-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET") #'mw-thesaurus-follow)
+    map)
+  "Keymap for minor mode `mw-thesaurus-mode'.")
+
+(define-minor-mode mw-thesaurus-mode
+  "Merriam-Webster thesaurus minor mode
+
+\\{mw-thesaurus-mode-map}"
+  ;; :group 'mw-thesaurus
+  :lighter " Merriam-Webster"
+  ;; :init-value nil
+  :keymap mw-thesaurus-mode-map)
+
+
 (defcustom mw-thesaurus--api-key
   "67d977d5-790b-412e-a547-9dbcc2bcd525"
   "Merriam-Webster API access key")
@@ -47,6 +68,9 @@
 (defcustom mw-thesaurus--base-url
   "http://www.dictionaryapi.com/api/v1/references/thesaurus/xml/"
   "Merriam-Webster API base URL")
+
+(defun mw-thesaurus-follow ()
+  (message "Ша буду фолловить"))
 
 (defun get-xml-node (root path)
   "From parsed XML retrieves a node
@@ -138,6 +162,7 @@ returns multi-line text in org-mode format"
         (set-buffer temp-buf)
         (switch-to-buffer-other-window temp-buf)
         (with-current-buffer temp-buf
+          (mw-thesaurus-mode t)
           (setf (buffer-string) "")
           (funcall 'org-mode)
           (insert (decode-coding-string dict-str 'dos))
