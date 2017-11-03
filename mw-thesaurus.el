@@ -49,7 +49,7 @@
   "Keymap for minor mode variable `mw-thesaurus-mode'.")
 
 (defvar mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *"
-  "default buffer name for Merriam-Webster Thesaurus.")
+  "Default buffer name for Merriam-Webster Thesaurus.")
 
 (define-minor-mode mw-thesaurus-mode
   "Merriam-Webster thesaurus minor mode
@@ -70,12 +70,8 @@
   "http://www.dictionaryapi.com/api/v1/references/thesaurus/xml/"
   "Merriam-Webster API base URL.")
 
-(defun mw-thesaurus-follow ()
-  (interactive)
-  (message "Ша буду фолловить"))
-
 (defun get-xml-node (root path)
-  "From parsed XML retrieves a node
+  "From parsed xml ROOT retrieves a node for given PATH.
 
 Usage: `(get-xml-node html-root '(html head title))`"
   (let* ((current-node (xml-get-children root (car path))))
@@ -84,7 +80,7 @@ Usage: `(get-xml-node html-root '(html head title))`"
       current-node)))
 
 (defun mw-thesaurus--italicize (prop)
-  "Checks if the element contains <it> tag, retrieves content, resulting string is placed between '/' and '/'."
+  "Check for element PROP containing <it> tag, retrieves content, resulting string is placed between '/' and '/'."
   (let* ((its (get-xml-node prop '(it))))
     (mapconcat
      (lambda (e)
@@ -94,12 +90,14 @@ Usage: `(get-xml-node html-root '(html head title))`"
      prop "")))
 
 (defun mw-thesaurus--snd-subs (article)
+  "Second level of ARTICLE."
   (let* ((whole-sub (-> article
                         (get-xml-node '(vi)) car))
          (sub-str (mw-thesaurus--italicize whole-sub)))
     (concat "   - " sub-str)))
 
 (defun mw-thesaurus--other-tag (article tag-type)
+  "Parse ARTICLE for different TAG-TYPE."
   (let* ((content (-> article
                         (get-xml-node `(,tag-type))
                         car
@@ -114,6 +112,7 @@ Usage: `(get-xml-node html-root '(html head title))`"
       (string-join (list "\n*** " title ":\n    " (s-replace ";" "\n   " content)) ""))))
 
 (defun mw-thesaurus--third-lvl (article)
+  "Third level of ARTICLE."
   (let* ((syns (mw-thesaurus--other-tag article 'syn))
          (rels (mw-thesaurus--other-tag article 'rel))
          (nears (mw-thesaurus--other-tag article 'near))
@@ -121,6 +120,7 @@ Usage: `(get-xml-node html-root '(html head title))`"
     (string-join (list syns rels nears ants) "")))
 
 (defun mw-thesaurus--snd-level (entry)
+  "Second level of ENTRY."
   (let ((articles (get-xml-node entry '(sens))))
     (mapconcat
      (lambda (article)
@@ -134,16 +134,19 @@ Usage: `(get-xml-node html-root '(html head title))`"
      "\n")))
 
 (defun mw-thesaurus--get-title (entry)
+  "Title for ENTRY."
   (-> (get-xml-node entry '(term hw))
       car (seq-drop 2) car))
 
 (defun mw-thesaurus--get-type (entry)
+  "Type of the ENTRY is at <fl> tag."
   (-> (get-xml-node entry '(fl))
       car (seq-drop 2) car))
 
 (defun mw-thesaurus--parse (xml-data)
-  "Parses XML returned by Merriam-Webster dictionary API,
-returns multi-line text in org-mode format"
+  "Parse xml returned by Merriam-Webster dictionary API.
+
+Take XML-DATA, Returns multi-line text in ‘org-mode’ format."
   (let* ((entry-list (assq 'entry_list xml-data))
          (entries (xml-get-children entry-list 'entry)))
       (mapconcat
@@ -155,7 +158,7 @@ returns multi-line text in org-mode format"
        entries "\n")))
 
 (defun mw-thesaurus--create-buffer (word data)
-  "build mw-thesaurus buffer for WORD and the relevant DATA from Merriam-Webster API"
+  "Build mw-thesaurus buffer for WORD and the relevant DATA from Merriam-Webster API."
   (let ((dict-str (mw-thesaurus--parse data)))
     (if (< (length dict-str) 1)
         (message (concat "Sadly, Merriam-Webster doesn't seem to have anything for " word))
@@ -174,8 +177,7 @@ returns multi-line text in org-mode format"
           (read-only-mode))))))
 
 (defun mw-thesaurus/lookup-at-point ()
-  "looks up a thesaurus definition for word at point
-using Merriam-Webster online dictionary"
+  "Look up a thesaurus definition for word at point using Merriam-Webster online dictionary."
   (interactive)
   (let* ((word (word-at-point))
          (url (concat (symbol-value 'mw-thesaurus--base-url)
@@ -188,6 +190,7 @@ using Merriam-Webster online dictionary"
                  (mw-thesaurus--create-buffer word data))))))
 
 (defun mw-thesaurus/quit ()
+  "Kill Merriam-Webster Thesaurus buffer."
   (interactive)
   (when-let ((buffer (get-buffer mw-thesaurus-buffer-name)))
     (quit-window)
