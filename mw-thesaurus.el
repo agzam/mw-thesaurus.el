@@ -45,31 +45,30 @@
   :prefix "mw-thesaurus-"
   :group 'applications)
 
-(defvar mw-thesaurus-mode-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "RET") #'mw-thesaurus-follow)
-    map)
-  "Keymap for minor mode `mw-thesaurus-mode'.")
+(defvar mw-thesaurus-mode-map (make-sparse-keymap)
+  "Keymap for minor mode variable `mw-thesaurus-mode'.")
 
 (define-minor-mode mw-thesaurus-mode
   "Merriam-Webster thesaurus minor mode
-
 \\{mw-thesaurus-mode-map}"
-  ;; :group 'mw-thesaurus
+  :group 'mw-thesaurus
   :lighter " Merriam-Webster"
-  ;; :init-value nil
+  ;; :global t
+  :init-value nil
   :keymap mw-thesaurus-mode-map)
-
 
+(define-key mw-thesaurus-mode-map [remap org-open-at-point] 'mw-thesaurus/lookup-at-point)
+
 (defcustom mw-thesaurus--api-key
   "67d977d5-790b-412e-a547-9dbcc2bcd525"
-  "Merriam-Webster API access key")
+  "Merriam-Webster API access key.")
 
 (defcustom mw-thesaurus--base-url
   "http://www.dictionaryapi.com/api/v1/references/thesaurus/xml/"
-  "Merriam-Webster API base URL")
+  "Merriam-Webster API base URL.")
 
 (defun mw-thesaurus-follow ()
+  (interactive)
   (message "Ша буду фолловить"))
 
 (defun get-xml-node (root path)
@@ -82,7 +81,7 @@ Usage: `(get-xml-node html-root '(html head title))`"
       current-node)))
 
 (defun mw-thesaurus--italicize (prop)
-  "Checks if the element contains <it> tag, retrieves content, resulting string is placed between '/' and '/'"
+  "Checks if the element contains <it> tag, retrieves content, resulting string is placed between '/' and '/'."
   (let* ((its (get-xml-node prop '(it))))
     (mapconcat
      (lambda (e)
@@ -153,18 +152,21 @@ returns multi-line text in org-mode format"
        entries "\n")))
 
 (defun mw-thesaurus--create-buffer (word data)
+  "build mw-thesaurus buffer for WORD and the relevant DATA from Merriam-Webster API"
   (let ((dict-str (mw-thesaurus--parse data)))
     (if (< (length dict-str) 1)
         (message (concat "Sadly, Merriam-Webster doesn't seem to have anything for " word))
       (let* ((buffer-name "* Thesaurus *")
              (temp-buf (get-buffer-create buffer-name)))
-        (print temp-buf)
+        ;; (print temp-buf)
+        (when (not (bound-and-true-p mw-thesaurus-mode))
+          (switch-to-buffer-other-window temp-buf))
         (set-buffer temp-buf)
-        (switch-to-buffer-other-window temp-buf)
         (with-current-buffer temp-buf
-          (mw-thesaurus-mode t)
+          (read-only-mode -1)
           (setf (buffer-string) "")
           (funcall 'org-mode)
+          (funcall 'mw-thesaurus-mode)
           (insert (decode-coding-string dict-str 'dos))
           (goto-char (point-min))
           (read-only-mode))))))
@@ -184,3 +186,7 @@ using Merriam-Webster online dictionary"
                  (mw-thesaurus--create-buffer word data))))))
 
 (provide 'mw-thesaurus)
+
+(provide 'mw-thesaurus)
+
+;;; mw-thesaurus.el ends here
