@@ -48,16 +48,19 @@
 (defvar mw-thesaurus-mode-map (make-sparse-keymap)
   "Keymap for minor mode variable `mw-thesaurus-mode'.")
 
+(defvar mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *"
+  "default buffer name for Merriam-Webster Thesaurus.")
+
 (define-minor-mode mw-thesaurus-mode
   "Merriam-Webster thesaurus minor mode
 \\{mw-thesaurus-mode-map}"
   :group 'mw-thesaurus
   :lighter " Merriam-Webster"
-  ;; :global t
   :init-value nil
   :keymap mw-thesaurus-mode-map)
 
-(define-key mw-thesaurus-mode-map [remap org-open-at-point] 'mw-thesaurus/lookup-at-point)
+(define-key mw-thesaurus-mode-map [remap org-open-at-point] #'mw-thesaurus/lookup-at-point)
+(define-key mw-thesaurus-mode-map [remap evil-record-macro] #'mw-thesaurus/quit)
 
 (defcustom mw-thesaurus--api-key
   "67d977d5-790b-412e-a547-9dbcc2bcd525"
@@ -156,8 +159,7 @@ returns multi-line text in org-mode format"
   (let ((dict-str (mw-thesaurus--parse data)))
     (if (< (length dict-str) 1)
         (message (concat "Sadly, Merriam-Webster doesn't seem to have anything for " word))
-      (let* ((buffer-name "* Thesaurus *")
-             (temp-buf (get-buffer-create buffer-name)))
+      (let* ((temp-buf (get-buffer-create mw-thesaurus-buffer-name)))
         ;; (print temp-buf)
         (when (not (bound-and-true-p mw-thesaurus-mode))
           (switch-to-buffer-other-window temp-buf))
@@ -184,6 +186,12 @@ using Merriam-Webster online dictionary"
      :success (cl-function
                (lambda (&key data &allow-other-keys)
                  (mw-thesaurus--create-buffer word data))))))
+
+(defun mw-thesaurus/quit ()
+  (interactive)
+  (when-let ((buffer (get-buffer mw-thesaurus-buffer-name)))
+    (quit-window)
+    (kill-buffer buffer)))
 
 (provide 'mw-thesaurus)
 
