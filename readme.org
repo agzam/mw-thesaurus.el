@@ -1,14 +1,13 @@
 * Merriam-Webster Thesaurus
   For more than 150 years, in print and now online, Merriam-Webster has been America's leading and most-trusted provider of language information.
 
-  This package allows you to lookup a word and display its thesaurus definition in a nice Org-mode format
+  This package allows you to lookup a word and display its thesaurus definition in a nice outline format
 
 [[file:assets/thesaurus.gif]]
 
-* Install
 * Configure
-  In order to use Merriam Webster API it is required to obtain an API Key.
-  By default this package is using my key, if for whatever reason you rather use your own key or the default key stops working:
+  In order to use Merriam Webster API it is required to register (for free) and obtain an API Key.
+  By default this package is using my own registered key, for whatever reason if you rather use your own key or the default key stops working:
   - [[https://www.dictionaryapi.com/register/index.htm][Register free account]] at Merriam-Webster's Developer Center
   - Obtain a key for Merriam-Webster Thesaurus
   - Set the variable
@@ -16,6 +15,10 @@
     (setq mw-thesaurus--api-key "YOUR-API-KEY")
   #+end_src
 
-  Spacemacs users can easily add the package to ~dotspacemacs-additional-packages~ and start using it, or even add it to be part of a custom layer, [[https://github.com/agzam/dot-spacemacs/tree/master/layers/mw-thesaurus][see an example]].
+  Spacemacs users can easily add the package to ~dotspacemacs-additional-packages~ and start using it, or even add it to be part of a custom layer, [[https://github.com/agzam/dot-spacemacs/blob/master/layers/ag-lang-tools/packages.el#L20][see an example]].
 * Commands
   ~mw-thesaurus/lookup-at-point~ - bind that to any desired hotkey
+* Keys
+  ~RET~ lookup for the word
+
+  ~q~ kill mw-thesaurus buffer and close the window
