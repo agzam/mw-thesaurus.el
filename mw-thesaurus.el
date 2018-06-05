@@ -38,6 +38,8 @@
 (require 'request)
 (require 'thingatpt)
 (require 'xml)
+(require 'dash)
+
 
 (defgroup mw-thesaurus nil
   "Merriam-Webster Thesaurus"
