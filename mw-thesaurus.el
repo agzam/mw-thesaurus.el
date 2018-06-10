@@ -38,8 +38,8 @@
 (require 'request)
 (require 'thingatpt)
 (require 'xml)
+(require 'org)
 (require 'dash)
-
 
 (defgroup mw-thesaurus nil
   "Merriam-Webster Thesaurus"
@@ -61,7 +61,6 @@
   :keymap mw-thesaurus-mode-map)
 
 (define-key mw-thesaurus-mode-map [remap org-open-at-point] #'mw-thesaurus--lookup-at-point)
-(define-key mw-thesaurus-mode-map [remap evil-record-macro] #'mw-thesaurus--quit)
 (define-key mw-thesaurus-mode-map (kbd "q") #'mw-thesaurus--quit)
 
 (defcustom mw-thesaurus--api-key
