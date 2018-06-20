@@ -65,11 +65,13 @@
 
 (defcustom mw-thesaurus--api-key
   "67d977d5-790b-412e-a547-9dbcc2bcd525"
-  "Merriam-Webster API access key.")
+  "Merriam-Webster API access key."
+  :type 'string)
 
 (defcustom mw-thesaurus--base-url
   "http://www.dictionaryapi.com/api/v1/references/thesaurus/xml/"
-  "Merriam-Webster API base URL.")
+  "Merriam-Webster API base URL."
+  :type 'string)
 
 (defun mw-thesaurus--get-xml-node (root path)
   "From parsed xml ROOT retrieves a node for given PATH.
@@ -193,7 +195,7 @@ Take XML-DATA, Returns multi-line text in ‘org-mode’ format."
 (defun mw-thesaurus--quit ()
   "Kill Merriam-Webster Thesaurus buffer."
   (interactive)
-  (when-let ((buffer (get-buffer mw-thesaurus-buffer-name)))
+  (when-let* ((buffer (get-buffer mw-thesaurus-buffer-name)))
     (quit-window)
     (kill-buffer buffer)))
 
