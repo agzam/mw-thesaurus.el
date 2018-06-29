@@ -52,6 +52,7 @@
 (defvar mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *"
   "Default buffer name for Merriam-Webster Thesaurus.")
 
+;;;###autoload
 (define-minor-mode mw-thesaurus-mode
   "Merriam-Webster thesaurus minor mode
 \\{mw-thesaurus-mode-map}"
