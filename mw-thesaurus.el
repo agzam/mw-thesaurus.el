@@ -178,7 +178,9 @@ Take XML-DATA, Returns multi-line text in ‘org-mode’ format."
           (funcall 'mw-thesaurus-mode)
           (insert (decode-coding-string dict-str 'dos))
           (goto-char (point-min))
-          (read-only-mode))))))
+          (read-only-mode)
+          (local-set-key [backspace] 'scroll-down)
+          (local-set-key " " 'scroll-up))))))
 
 (defun mw-thesaurus--lookup-at-point ()
   "Look up a thesaurus definition for word at point using Merriam-Webster online dictionary."
