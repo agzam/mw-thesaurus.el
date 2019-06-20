@@ -19,7 +19,7 @@
 *** Spacemacs layer
 Spacemacs users can easily add the package to ~dotspacemacs-additional-packages~ and start using it, or even add it to be part of a custom layer, [[https://github.com/agzam/dot-spacemacs/blob/master/layers/ag-lang-tools/packages.el#L20][see an example]].
 * Commands
-  ~mw-thesaurus/lookup-at-point~ - bind that to any desired hotkey
+  ~mw-thesaurus-lookup-at-point~ - bind that to any desired hotkey
 * Keys
   ~RET~ lookup for the word
 

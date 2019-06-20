@@ -52,7 +52,6 @@
 (defvar mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *"
   "Default buffer name for Merriam-Webster Thesaurus.")
 
-;;;###autoload
 (define-minor-mode mw-thesaurus-mode
   "Merriam-Webster thesaurus minor mode
 \\{mw-thesaurus-mode-map}"
@@ -61,7 +60,7 @@
   :init-value nil
   :keymap mw-thesaurus-mode-map)
 
-(define-key mw-thesaurus-mode-map [remap org-open-at-point] #'mw-thesaurus--lookup-at-point)
+(define-key mw-thesaurus-mode-map [remap org-open-at-point] #'mw-thesaurus-lookup-at-point)
 (define-key mw-thesaurus-mode-map (kbd "q") #'mw-thesaurus--quit)
 
 (defcustom mw-thesaurus--api-key
@@ -89,7 +88,7 @@ Usage: `(mw-thesaurus--get-xml-node html-root '(html head title))`"
     (mapconcat
      (lambda (e)
        (if (member e its)
-           (concat "/" (-> e last car string-trim) "/")
+           (concat "​/" (-> e last car string-trim) "/​")
          (when (stringp e ) e)))
      prop "")))
 
@@ -156,7 +155,7 @@ Take XML-DATA, Returns multi-line text in ‘org-mode’ format."
     (mapconcat
      (lambda (entry)
        (let ((fst-level (concat "* " (mw-thesaurus--get-title entry)
-                                " [" (mw-thesaurus--get-type entry) "]\n"))
+                                " ~" (mw-thesaurus--get-type entry) "~\n"))
              (snd-level (mw-thesaurus--snd-level entry)))
          (string-join (list fst-level snd-level) "")))
      entries "\n")))
@@ -174,13 +173,16 @@ Take XML-DATA, Returns multi-line text in ‘org-mode’ format."
         (with-current-buffer temp-buf
           (read-only-mode -1)
           (setf (buffer-string) "")
+          (setf org-hide-emphasis-markers t)
           (funcall 'org-mode)
           (funcall 'mw-thesaurus-mode)
           (insert (decode-coding-string dict-str 'dos))
           (goto-char (point-min))
           (read-only-mode))))))
 
-(defun mw-thesaurus--lookup-at-point ()
+
+;;;###autoload
+(defun mw-thesaurus-lookup-at-point ()
   "Look up a thesaurus definition for word at point using Merriam-Webster online dictionary."
   (interactive)
   (let* ((word (word-at-point))
