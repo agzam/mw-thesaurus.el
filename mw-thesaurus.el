@@ -180,12 +180,70 @@ Take XML-DATA, Returns multi-line text in ‘org-mode’ format."
           (goto-char (point-min))
           (read-only-mode))))))
 
+(defun mw-thesaurus-get-original-word (beginning end)
+  "Get a word to look for from the user.
+`BEGINNING' and `END' correspond to the selected text (if selected).
+If presented, the selected text will be used.
+Otherwise, user must provide additional information."
+  (if (use-region-p)
+      (buffer-substring-no-properties beginning end)
+    (read-string "Word to look up: ")))
+
+(defun mw-thesaurus-is-at-the-beginning-of-word (word-point)
+  "Predicate to check whether `WORD-POINT' points to the beginning of the word."
+  (save-excursion
+    ;; If we are at the beginning of a word
+    ;; this will take us to the beginning of the previous word.
+    ;; Otherwise, this will take us to the beginning of the current word.
+    (backward-word)
+    ;; This will take us to the end of the previous word or to the end
+    ;; of the current word depending on whether we were at the beginning
+    ;; of a word.
+    (forward-word)
+    ;; Compare our original position with wherever we're now to
+    ;; separate those two cases
+    (< (point) word-point)))
 
 ;;;###autoload
-(defun mw-thesaurus-lookup-at-point ()
-  "Look up a thesaurus definition for word at point using Merriam-Webster online dictionary."
+(defun mw-thesaurus-lookup-dwim ()
+  "Look up a thesaurus definition on demand using Merriam-Webster online dictionary.
+If a region is selected use mw-thesaurus-lookup-word
+if a thing at point is not empty use mw-thesaurus-lookup-word-at-point
+otherwise as for word using mw-thesaurus-lookup-word"
   (interactive)
-  (let* ((word (word-at-point))
+  (let (beg end)
+    (if (use-region-p)
+        (progn
+          (setq beg (region-beginning)
+                end (region-end))
+          (mw-thesaurus-lookup beg end))
+      (if (thing-at-point 'word)
+          (mw-thesaurus-lookup-at-point (point))
+        (mw-thesaurus-lookup)))))
+
+;;;###autoload
+(defun mw-thesaurus-lookup-at-point (word-point)
+  "Look up a thesaurus definition for word at point using Merriam-Webster online dictionary."
+  (interactive (list (point)))
+  (save-mark-and-excursion
+    (unless (mw-thesaurus-is-at-the-beginning-of-word word-point)
+      (backward-word))
+    (set-mark (point))
+    (forward-word)
+    (activate-mark)
+    (mw-thesaurus-lookup (region-beginning) (region-end))))
+
+;;;###autoload
+(defun mw-thesaurus-lookup (&optional beginning end)
+  "Look up a thesaurus definition for word using Merriam-Webster online dictionary.
+`BEGINNING' and `END' correspond to the selected text with a word to look up.
+If there is no selection provided, additional input will be required."
+  (interactive
+   ;; it is a simple interactive function instead of interactive "r"
+   ;; because it doesn't produce an error in a buffer without a mark
+   (if (use-region-p) (list (region-beginning) (region-end))
+     (list nil nil)))
+  (let* ((word (mw-thesaurus-get-original-word beginning end))
          (url (concat (symbol-value 'mw-thesaurus--base-url)
                       word "?key="
                       (symbol-value 'mw-thesaurus--api-key))))
