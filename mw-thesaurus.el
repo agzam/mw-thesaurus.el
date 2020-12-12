@@ -112,7 +112,7 @@ Usage: `(mw-thesaurus--get-xml-node html-root '(html head title))`"
                 ((eq tag-type 'ant) "Antonyms")
                 (t "Unknown type"))))
     (when (and content (< 0 (length content)))
-      (string-join (list "\n*** " title ":\n    " (s-replace ";" "\n   " content)) ""))))
+      (string-join (list "\n*** " title ":\n    " (replace-regexp-in-string ";" "\n   " content t t)) ""))))
 
 (defun mw-thesaurus--third-lvl (article)
   "Third level of ARTICLE."
