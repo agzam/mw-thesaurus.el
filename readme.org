@@ -1,14 +1,14 @@
 * Merriam-Webster Thesaurus
   For more than 150 years, in print and now online, Merriam-Webster has been America's leading and most-trusted provider of language information.
 
-  This package allows you to lookup a word and display its thesaurus definition in a nice outline format
+  This package allows you to lookup a word and displays its thesaurus definition in a pleasing outline (Org-mode) format
 
 [[file:assets/thesaurus.gif]]
 
 * Configure
-*** This is totally optional and you don't have to do it, but you may want to: 
-  In order to use Merriam Webster API it is required to register (for free) and obtain an API Key.
-  By default this package is using my own registered key, for whatever reason if you rather use your own key or the default key stops working:
+*** This is entirely optional, and you don't have to do it at all (not required for the package to work), but you may want to do it anyway: 
+  In order to use Merriam Webster API, it is necessary to register (for free) and obtain an API Key.
+  By default, this package uses my own registered key; for whatever reason, if you rather use your own key or the default one stops working, then you'd need to do this. I've been using mine for years, and it still works fine, but I can imagine some kind of spam detection mechanism adding the key into the block-list. Well, if that happens, just register a new account (again, you don't have to pay for it, and it takes a minute):
   - [[https://www.dictionaryapi.com/register/index.htm][Register free account]] at Merriam-Webster's Developer Center
   - Obtain a key for Merriam-Webster Thesaurus
   - Set the variable
@@ -19,8 +19,8 @@
 *** Spacemacs layer
 Spacemacs users can easily add the package to ~dotspacemacs-additional-packages~ and start using it, or even add it to be part of a custom layer, [[https://github.com/agzam/dot-spacemacs/blob/master/layers/ag-lang-tools/packages.el#L20][see an example]].
 * Commands
-  ~mw-thesaurus-lookup-at-point~ - bind that to any desired hotkey
-* Keys
-  ~RET~ lookup for the word
+  ~mw-thesaurus-lookup-dwim~ - bind that to any desired hotkey, and it would automatically search for a thesaurus definition using the region (if you have any text selected) or a word at the point, or if there's nothing - it prompts you for a word.
+* Keys available in mw-thesaurus-mode
+  ~RET~ lookup for the word at the cursor (lets you "drill" into definition further)
 
   ~q~ kill mw-thesaurus buffer and close the window
