@@ -6,7 +6,7 @@
 ;; Keywords: wp, matching
 ;; License: GPL v3
 ;; Package-Requires: ((emacs "25") (request "0.3.0") (dash "2.16.0"))
-;; Version: 0.0.1
+;; Version: 1.0.1
 
 ;;; Commentary:
 
