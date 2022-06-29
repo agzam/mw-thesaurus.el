@@ -63,7 +63,7 @@
 (define-key mw-thesaurus-mode-map [remap org-open-at-point] #'mw-thesaurus-lookup-at-point)
 (define-key mw-thesaurus-mode-map (kbd "q") #'mw-thesaurus--quit)
 
-(defcustom mw-thesaurus--api-key
+(defcustom mw-thesaurus-api-key
   "67d977d5-790b-412e-a547-9dbcc2bcd525"
   "Merriam-Webster API access key."
   :type 'string)
@@ -246,7 +246,7 @@ If there is no selection provided, additional input will be required."
   (let* ((word (mw-thesaurus-get-original-word beginning end))
          (url (concat (symbol-value 'mw-thesaurus--base-url)
                       word "?key="
-                      (symbol-value 'mw-thesaurus--api-key))))
+                      (symbol-value 'mw-thesaurus-api-key))))
     (request url
              :parser (lambda () (xml-parse-region (point-min) (point-max)))
              :success (cl-function

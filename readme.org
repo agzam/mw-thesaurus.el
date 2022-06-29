@@ -13,7 +13,7 @@
   - Obtain a key for Merriam-Webster Thesaurus
   - Set the variable
   #+begin_src emacs-lisp
-    (setq mw-thesaurus--api-key "YOUR-API-KEY")
+    (setq mw-thesaurus-api-key "YOUR-API-KEY")
   #+end_src
 
 *** Spacemacs layer
