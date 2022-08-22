@@ -58,7 +58,8 @@
   :group 'mw-thesaurus
   :lighter " Merriam-Webster"
   :init-value nil
-  :keymap mw-thesaurus-mode-map)
+  :keymap mw-thesaurus-mode-map
+  (read-only-mode 1))
 
 (define-key mw-thesaurus-mode-map [remap org-open-at-point] #'mw-thesaurus-lookup-at-point)
 (define-key mw-thesaurus-mode-map (kbd "q") #'mw-thesaurus--quit)
@@ -164,21 +165,20 @@ Take XML-DATA, Returns multi-line text in ‘org-mode’ format."
   "Build mw-thesaurus buffer for WORD and the relevant DATA from Merriam-Webster API."
   (let ((dict-str (mw-thesaurus--parse data)))
     (if (< (length dict-str) 1)
-        (message (concat "Sadly, Merriam-Webster doesn't seem to have anything for " word))
+        (message "Sadly, Merriam-Webster doesn't seem to have anything for '%s'" word)
       (let ((temp-buf (get-buffer-create mw-thesaurus-buffer-name)))
         ;; (print temp-buf)
-        (when (not (bound-and-true-p mw-thesaurus-mode))
+        (unless (bound-and-true-p mw-thesaurus-mode)
           (switch-to-buffer-other-window temp-buf))
         (set-buffer temp-buf)
         (with-current-buffer temp-buf
-          (read-only-mode -1)
-          (setf (buffer-string) "")
-          (setf org-hide-emphasis-markers t)
-          (funcall 'org-mode)
-          (funcall 'mw-thesaurus-mode)
-          (insert (decode-coding-string dict-str 'dos))
-          (goto-char (point-min))
-          (read-only-mode))))))
+          (let ((inhibit-read-only t))
+            (setf (buffer-string) "")
+            (setf org-hide-emphasis-markers t)
+            (insert (decode-coding-string dict-str 'dos)))
+          (org-mode)
+          (mw-thesaurus-mode)
+          (goto-char (point-min)))))))
 
 (defun mw-thesaurus-get-original-word (beginning end)
   "Get a word to look for from the user.
