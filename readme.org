@@ -18,6 +18,33 @@
 
 *** Spacemacs layer
 Spacemacs users can easily add the package to ~dotspacemacs-additional-packages~ and start using it, or even add it to be part of a custom layer, [[https://github.com/agzam/dot-spacemacs/blob/master/layers/ag-lang-tools/packages.el#L20][see an example]].
+
+*** Doom module
+=packages.el=:
+#+begin_src emacs-lisp
+(package! mw-thesaurus)
+#+end_src
+
+=config.el= example:
+#+begin_src emacs-lisp
+(use-package! mw-thesaurus
+  :defer t
+  :commands mw-thesaurus-lookup-dwim
+  :hook (mw-thesaurus-mode . variable-pitch-mode)
+  :config
+  (map! :map mw-thesaurus-mode-map [remap evil-record-macro] #'mw-thesaurus--quit)
+
+  ;; window on the right side
+  (add-to-list
+   'display-buffer-alist
+   `(,mw-thesaurus-buffer-name
+     (display-buffer-reuse-window
+      display-buffer-in-direction)
+     (direction . right)
+     (window . root)
+     (window-width . 0.3))))
+#+end_src
+
 * Commands
   ~mw-thesaurus-lookup-dwim~ - bind that to any desired hotkey, and it would automatically search for a thesaurus definition using the region (if you have any text selected) or a word at the point, or if there's nothing - it prompts you for a word.
 * Keys available in mw-thesaurus-mode
