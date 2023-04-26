@@ -172,9 +172,9 @@ Take XML-DATA, Returns multi-line text in ‘org-mode’ format."
           (switch-to-buffer-other-window temp-buf))
         (set-buffer temp-buf)
         (with-current-buffer temp-buf
-          (let ((inhibit-read-only t))
-            (setf (buffer-string) "")
-            (setf org-hide-emphasis-markers t)
+          (let ((inhibit-read-only t)
+                (org-hide-emphasis-markers t))
+            (erase-buffer)
             (insert (decode-coding-string dict-str 'dos)))
           (org-mode)
           (mw-thesaurus-mode)
