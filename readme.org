@@ -47,6 +47,8 @@ Spacemacs users can easily add the package to ~dotspacemacs-additional-packages~
 
 * Commands
   ~mw-thesaurus-lookup-dwim~ - bind that to any desired hotkey, and it would automatically search for a thesaurus definition using the region (if you have any text selected) or a word at the point, or if there's nothing - it prompts you for a word.
+
+  If the word has no entry, e.g. because of a typo, the first spelling suggestion from Merriam-Webster shows instead: "hapy" shows "happy".
 * Keys available in mw-thesaurus-mode
   ~RET~ lookup for the word at the cursor (lets you "drill" into definition further)
 

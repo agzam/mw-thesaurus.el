@@ -6,7 +6,7 @@
 ;; Keywords: wp, matching
 ;; License: GPL v3
 ;; Package-Requires: ((emacs "26.1") (request "0.3.0") (dash "2.16.0"))
-;; Version: 1.0.1
+;; Version: 1.1.0
 
 ;;; Commentary:
 
@@ -164,25 +164,52 @@ Take XML-DATA, Returns multi-line text in ‘org-mode’ format."
              (snd-level (mw-thesaurus--snd-level entry)))
          (string-join (list fst-level snd-level) "")))
      entries "\n")))
-
-(defun mw-thesaurus--create-buffer (word data)
-  "Build mw-thesaurus buffer for WORD with DATA from Merriam-Webster API."
-  (let ((dict-str (mw-thesaurus--parse data)))
-    (if (< (length dict-str) 1)
-        (message "Sadly, Merriam-Webster doesn't seem to have anything for '%s'" word)
-      (let ((temp-buf (get-buffer-create mw-thesaurus-buffer-name)))
-        ;; (print temp-buf)
-        (unless (bound-and-true-p mw-thesaurus-mode)
-          (switch-to-buffer-other-window temp-buf))
-        (set-buffer temp-buf)
-        (with-current-buffer temp-buf
-          (let ((inhibit-read-only t)
-                (org-hide-emphasis-markers t))
-            (erase-buffer)
-            (insert (decode-coding-string dict-str 'dos)))
-          (org-mode)
-          (mw-thesaurus-mode)
-          (goto-char (point-min)))))))
+
+(defun mw-thesaurus--suggestions (xml-data)
+  "Return the spelling suggestions in XML-DATA, a response without entries."
+  (mapcar (lambda (node) (car (xml-node-children node)))
+          (xml-get-children (assq 'entry_list xml-data) 'suggestion)))
+
+(defun mw-thesaurus--create-buffer (dict-str)
+  "Show DICT-STR, the thesaurus entries in Org format, in the thesaurus buffer."
+  (let ((temp-buf (get-buffer-create mw-thesaurus-buffer-name)))
+    ;; (print temp-buf)
+    (unless (bound-and-true-p mw-thesaurus-mode)
+      (switch-to-buffer-other-window temp-buf))
+    (set-buffer temp-buf)
+    (with-current-buffer temp-buf
+      (let ((inhibit-read-only t)
+            (org-hide-emphasis-markers t))
+        (erase-buffer)
+        (insert (decode-coding-string dict-str 'dos)))
+      (org-mode)
+      (mw-thesaurus-mode)
+      (goto-char (point-min)))))
+
+(defun mw-thesaurus--lookup-word (word &optional missed-word)
+  "Look up WORD and show its thesaurus entries.
+When WORD has no entry, look up its first spelling suggestion instead.
+MISSED-WORD is the word that had no entry; it goes to the echo area and
+prevents a second fallback."
+  (request (concat mw-thesaurus--base-url (url-hexify-string word)
+                   "?key=" mw-thesaurus-api-key)
+    :parser (lambda () (xml-parse-region (point-min) (point-max)))
+    :success
+    (cl-function
+     (lambda (&key data &allow-other-keys)
+       (let ((dict-str (mw-thesaurus--parse data))
+             (suggestion (car (mw-thesaurus--suggestions data))))
+         (cond
+          ((< 0 (length dict-str))
+           (mw-thesaurus--create-buffer dict-str)
+           (when missed-word
+             (message "No Merriam-Webster entry for \"%s\", showing \"%s\""
+                      missed-word word)))
+          ((and suggestion (not missed-word))
+           (mw-thesaurus--lookup-word suggestion word))
+          (t
+           (message "No Merriam-Webster entry for \"%s\""
+                    (or missed-word word)))))))))
 
 (defun mw-thesaurus-get-original-word (beginning end)
   "Get a word to look for from the user.
@@ -247,15 +274,7 @@ If there is no selection provided, additional input will be required."
    ;; because it doesn't produce an error in a buffer without a mark
    (if (use-region-p) (list (region-beginning) (region-end))
      (list nil nil)))
-  (let* ((word (mw-thesaurus-get-original-word beginning end))
-         (url (concat (symbol-value 'mw-thesaurus--base-url)
-                      word "?key="
-                      (symbol-value 'mw-thesaurus-api-key))))
-    (request url
-             :parser (lambda () (xml-parse-region (point-min) (point-max)))
-             :success (cl-function
-                       (lambda (&key data &allow-other-keys)
-                         (mw-thesaurus--create-buffer word data))))))
+  (mw-thesaurus--lookup-word (mw-thesaurus-get-original-word beginning end)))
 
 (defun mw-thesaurus--quit ()
   "Kill Merriam-Webster Thesaurus buffer."
