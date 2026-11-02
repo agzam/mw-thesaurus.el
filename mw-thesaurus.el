@@ -41,7 +41,8 @@
 (require 'org)
 (require 'seq)
 (require 'subr-x)
-
+(require 'ucs-normalize)
+
 (defgroup mw-thesaurus nil
   "Merriam-Webster Thesaurus."
   :prefix "mw-thesaurus-"
@@ -63,6 +64,7 @@
   (read-only-mode 1))
 
 (define-key mw-thesaurus-mode-map [remap org-open-at-point] #'mw-thesaurus-lookup-at-point)
+(define-key mw-thesaurus-mode-map (kbd "RET") #'mw-thesaurus-lookup-at-point)
 (define-key mw-thesaurus-mode-map (kbd "q") #'mw-thesaurus--quit)
 
 (defcustom mw-thesaurus-api-key
@@ -70,10 +72,10 @@
   "Merriam-Webster API access key."
   :type 'string)
 
-(defcustom mw-thesaurus--base-url
+;; A package upgrade reloads this file; a defcustom would keep the old URL.
+(defconst mw-thesaurus--api-url
   "https://www.dictionaryapi.com/api/v3/references/thesaurus/json/"
-  "Merriam-Webster API base URL."
-  :type 'string)
+  "Merriam-Webster thesaurus API URL.")
 
 (defconst mw-thesaurus--word-lists
   '((syn_list . "Synonyms")
@@ -134,6 +136,12 @@
                         (mw-thesaurus--senses entry) "")))
    (seq-remove #'stringp data) ""))
 
+(defun mw-thesaurus--fold (word)
+  "Return WORD without diacritics; the API matches only plain letters."
+  (concat (seq-remove (lambda (char)
+                        (eq 'Mn (get-char-code-property char 'general-category)))
+                      (ucs-normalize-NFD-string word))))
+
 (defun mw-thesaurus--suggestions (data)
   "Return the spelling suggestions in DATA, a response without entries."
   (seq-filter #'stringp data))
@@ -156,7 +164,10 @@ Return the body text when it is not JSON, e.g. a key error."
     ;; (print temp-buf)
     ;; The `url-retrieve' callback runs in the response buffer, not the user's.
     (unless (buffer-local-value 'mw-thesaurus-mode (window-buffer))
-      (switch-to-buffer-other-window temp-buf))
+      ;; Keys typed at an open prompt must stay in the prompt.
+      (if (active-minibuffer-window)
+          (display-buffer temp-buf t)
+        (switch-to-buffer-other-window temp-buf)))
     (set-buffer temp-buf)
     (with-current-buffer temp-buf
       (let ((inhibit-read-only t)
@@ -173,7 +184,7 @@ When WORD has no entry, look up its first spelling suggestion if that is
 one or two edits away.  MISSED-WORD is the word that had no entry; it
 goes to the echo area and prevents a second fallback."
   (url-retrieve
-   (concat mw-thesaurus--base-url (url-hexify-string word)
+   (concat mw-thesaurus--api-url (url-hexify-string (mw-thesaurus--fold word))
            "?key=" mw-thesaurus-api-key)
    (lambda (status)
      (let* ((err (plist-get status :error))
@@ -183,7 +194,7 @@ goes to the echo area and prevents a second fallback."
        (kill-buffer)
        (cond
         (err (message "Merriam-Webster request failed: %S" err))
-        ((stringp data) (message "Merriam-Webster: %s" data))
+        ((stringp data) (message "Merriam-Webster: %s" (car (split-string data "\n"))))
         ((< 0 (length dict-str))
          (mw-thesaurus--create-buffer dict-str)
          (when missed-word

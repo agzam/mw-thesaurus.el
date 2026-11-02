@@ -221,6 +221,50 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
       (set-window-buffer nil shown)
       (kill-buffer mw-thesaurus-buffer-name))))
 
+(ert-deftest mw-thesaurus-lookup-folds-accents-test ()
+  (let ((result (mw-thesaurus-test--lookup-region "café" '("cafe") '("café" "cafe"))))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should (string-match-p "/json/cafe\\?key=" (car (plist-get result :urls))))
+    (should (string-prefix-p "* cafe ~verb~" (car (plist-get result :rendered))))
+    (should-not (plist-get result :messages))))
+
+(ert-deftest mw-thesaurus-lookup-shows-the-first-line-of-a-text-reply-test ()
+  (let ((result (mw-thesaurus-test--call
+                 (lambda (_) "<?xml version=\"1.0\"?>\n<entry_list/>")
+                 (lambda () (mw-thesaurus--lookup-word "happy")))))
+    (should (equal '("Merriam-Webster: <?xml version=\"1.0\"?>")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus--create-buffer-keeps-an-open-prompt-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+        displayed popped)
+    (unwind-protect
+        (cl-letf (((symbol-function 'active-minibuffer-window) #'minibuffer-window)
+                  ((symbol-function 'display-buffer)
+                   (lambda (buffer &rest _) (push buffer displayed) nil))
+                  ((symbol-function 'switch-to-buffer-other-window)
+                   (lambda (buffer &rest _) (push buffer popped))))
+          (mw-thesaurus--create-buffer "* happy ~adjective~\n")
+          (should (equal 1 (length displayed)))
+          (should-not popped))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-mode-ret-looks-up-test ()
+  (with-temp-buffer
+    (org-mode)
+    (mw-thesaurus-mode)
+    (should (eq #'mw-thesaurus-lookup-at-point (key-binding (kbd "RET"))))))
+
+(ert-deftest mw-thesaurus-reload-resets-the-api-url-test ()
+  (let ((url mw-thesaurus--api-url))
+    (unwind-protect
+        (progn
+          (setq mw-thesaurus--api-url
+                "http://www.dictionaryapi.com/api/v1/references/thesaurus/xml/")
+          (load (expand-file-name "mw-thesaurus.el") nil t)
+          (should (equal url mw-thesaurus--api-url)))
+      (setq mw-thesaurus--api-url url))))
+
 (ert-deftest mw-thesaurus-package-requires-test ()
   (with-temp-buffer
     (insert-file-contents "mw-thesaurus.el")
