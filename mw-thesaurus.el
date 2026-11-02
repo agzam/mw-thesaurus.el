@@ -29,7 +29,7 @@
 ;; word it asks for.
 
 ;;; Code:
-
+
 (require 'url)
 (require 'thingatpt)
 (require 'json)
@@ -65,12 +65,12 @@
   :init-value nil
   :keymap mw-thesaurus-mode-map
   (read-only-mode 1))
-
+
 (defcustom mw-thesaurus-api-key
   "67d977d5-790b-412e-a547-9dbcc2bcd525"
   "Merriam-Webster API access key."
   :type 'string)
-
+
 ;; A package upgrade reloads this file; a defcustom would keep the old URL.
 (defconst mw-thesaurus--api-url
   "https://www.dictionaryapi.com/api/v3/references/thesaurus/json/"
@@ -236,7 +236,7 @@ no entry, goes to the echo area and prevents a second fallback."
          (message "No Merriam-Webster entry for \"%s\""
                   (or missed-word word))))))
    nil t t))
-
+
 (defun mw-thesaurus-get-original-word (beginning end)
   "Get a word to look for from the user.
 `BEGINNING' and `END' correspond to the selected text (if selected).
@@ -301,14 +301,14 @@ If there is no selection provided, additional input will be required."
    (if (use-region-p) (list (region-beginning) (region-end))
      (list nil nil)))
   (mw-thesaurus--lookup-word (mw-thesaurus-get-original-word beginning end)))
-
+
 (defun mw-thesaurus--quit ()
   "Kill Merriam-Webster Thesaurus buffer."
   (interactive)
   (when-let* ((buffer (get-buffer mw-thesaurus-buffer-name)))
     (quit-window)
     (kill-buffer buffer)))
-
+
 (provide 'mw-thesaurus)
 
 ;;; mw-thesaurus.el ends here
