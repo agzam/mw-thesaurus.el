@@ -3,7 +3,7 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
-* [Unreleased]
+* [1.3.0] - 2026-11-02
 
 ** Changed
 - ~mw-thesaurus-mode~ is a major mode derived from Org mode, not a minor mode on top of it: keys bound in ~mw-thesaurus-mode-map~, also with ~evil-define-key~, override Org's; ~mw-thesaurus-mode-hook~ still runs
