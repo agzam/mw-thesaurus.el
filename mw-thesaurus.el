@@ -6,7 +6,7 @@
 ;; Keywords: wp, matching
 ;; License: GPL v3
 ;; Package-Requires: ((emacs "27.1"))
-;; Version: 1.2.1
+;; Version: 1.3.0
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@
 ;; word it asks for.
 
 ;;; Code:
-
+
 (require 'url)
 (require 'thingatpt)
 (require 'json)
@@ -52,25 +52,23 @@
     (define-key map (kbd "RET") #'mw-thesaurus-lookup-at-point)
     (define-key map (kbd "q") #'mw-thesaurus--quit)
     map)
-  "Keymap for minor mode variable `mw-thesaurus-mode'.")
+  "Keymap for `mw-thesaurus-mode'.")
 
 (defvar mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *"
   "Default buffer name for Merriam-Webster Thesaurus.")
 
-(define-minor-mode mw-thesaurus-mode
-  "Merriam-Webster thesaurus minor mode.
+(define-derived-mode mw-thesaurus-mode org-mode "Merriam-Webster"
+  "Major mode for Merriam-Webster thesaurus entries, derived from Org mode.
 \\{mw-thesaurus-mode-map}"
   :group 'mw-thesaurus
-  :lighter " Merriam-Webster"
-  :init-value nil
-  :keymap mw-thesaurus-mode-map
-  (read-only-mode 1))
-
+  (setq-local org-hide-emphasis-markers t)
+  (setq buffer-read-only t))
+
 (defcustom mw-thesaurus-api-key
   "67d977d5-790b-412e-a547-9dbcc2bcd525"
   "Merriam-Webster API access key."
   :type 'string)
-
+
 ;; A package upgrade reloads this file; a defcustom would keep the old URL.
 (defconst mw-thesaurus--api-url
   "https://www.dictionaryapi.com/api/v3/references/thesaurus/json/"
@@ -188,20 +186,18 @@ Return the body text when it is not JSON, e.g. a key error."
 (defun mw-thesaurus--create-buffer (dict-str)
   "Show DICT-STR, the thesaurus entries in Org format, in the thesaurus buffer."
   (let ((temp-buf (get-buffer-create mw-thesaurus-buffer-name)))
-    ;; (print temp-buf)
     ;; The `url-retrieve' callback runs in the response buffer, not the user's.
-    (unless (buffer-local-value 'mw-thesaurus-mode (window-buffer))
+    (unless (eq 'mw-thesaurus-mode
+                (buffer-local-value 'major-mode (window-buffer)))
       ;; Keys typed at an open prompt must stay in the prompt.
       (if (active-minibuffer-window)
           (display-buffer temp-buf t)
         (switch-to-buffer-other-window temp-buf)))
     (set-buffer temp-buf)
     (with-current-buffer temp-buf
-      (let ((inhibit-read-only t)
-            (org-hide-emphasis-markers t))
+      (let ((inhibit-read-only t))
         (erase-buffer)
         (insert dict-str))
-      (org-mode)
       (mw-thesaurus-mode)
       (goto-char (point-min)))))
 
@@ -236,7 +232,7 @@ no entry, goes to the echo area and prevents a second fallback."
          (message "No Merriam-Webster entry for \"%s\""
                   (or missed-word word))))))
    nil t t))
-
+
 (defun mw-thesaurus-get-original-word (beginning end)
   "Get a word to look for from the user.
 `BEGINNING' and `END' correspond to the selected text (if selected).
@@ -301,14 +297,14 @@ If there is no selection provided, additional input will be required."
    (if (use-region-p) (list (region-beginning) (region-end))
      (list nil nil)))
   (mw-thesaurus--lookup-word (mw-thesaurus-get-original-word beginning end)))
-
+
 (defun mw-thesaurus--quit ()
   "Kill Merriam-Webster Thesaurus buffer."
   (interactive)
   (when-let* ((buffer (get-buffer mw-thesaurus-buffer-name)))
     (quit-window)
     (kill-buffer buffer)))
-
+
 (provide 'mw-thesaurus)
 
 ;;; mw-thesaurus.el ends here

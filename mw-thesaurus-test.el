@@ -311,9 +311,9 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
           (with-temp-buffer
             (mw-thesaurus--create-buffer "* second ~noun~\n"))
           (should (equal 1 (length popped)))
-          (should (equal "* second ~noun~\n"
-                         (with-current-buffer mw-thesaurus-buffer-name
-                           (buffer-string)))))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should (equal "* second ~noun~\n" (buffer-string)))
+            (should (eq 'mw-thesaurus-mode major-mode))))
       (set-window-buffer nil shown)
       (kill-buffer mw-thesaurus-buffer-name))))
 
@@ -347,16 +347,35 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
 
 (ert-deftest mw-thesaurus-mode-ret-looks-up-test ()
   (with-temp-buffer
-    (org-mode)
     (mw-thesaurus-mode)
     (should (eq #'mw-thesaurus-lookup-at-point (key-binding (kbd "RET"))))))
 
 (ert-deftest mw-thesaurus-mode-evil-keys-test ()
   (with-temp-buffer
-    (org-mode)
     (mw-thesaurus-mode)
     (should (eq #'mw-thesaurus-lookup-at-point (command-remapping 'evil-ret)))
     (should (eq #'mw-thesaurus--quit (command-remapping 'evil-record-macro)))))
+
+(ert-deftest mw-thesaurus-mode-derives-from-org-mode-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    (should (eq 'mw-thesaurus-mode major-mode))
+    (should (derived-mode-p 'org-mode))
+    (should (eq org-mode-map (keymap-parent mw-thesaurus-mode-map)))
+    (should buffer-read-only)
+    (should (local-variable-p 'org-hide-emphasis-markers))
+    (should org-hide-emphasis-markers)
+    (should-not (default-value 'org-hide-emphasis-markers))))
+
+(ert-deftest mw-thesaurus-mode-map-overrides-org-keys-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    (should (eq #'org-ctrl-c-ctrl-c (key-binding (kbd "C-c C-c"))))
+    (unwind-protect
+        (progn
+          (define-key mw-thesaurus-mode-map (kbd "C-c C-c") #'ignore)
+          (should (eq #'ignore (key-binding (kbd "C-c C-c")))))
+      (define-key mw-thesaurus-mode-map (kbd "C-c C-c") nil))))
 
 (ert-deftest mw-thesaurus-reload-resets-the-api-url-test ()
   (let ((url mw-thesaurus--api-url))

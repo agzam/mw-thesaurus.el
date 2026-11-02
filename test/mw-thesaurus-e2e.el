@@ -134,7 +134,17 @@ say what the thesaurus shows passes whatever entries come back."
       :steps ((keys "M-x") (wait-prompt)
               (eval (run-at-time 0 nil #'mw-thesaurus--lookup-word "happy"))
               (wait-done) (type "ignore") (keys "Enter") (pause 1))
-      :expect (:shows "^\\* happy ")))
+      :expect (:shows "^\\* happy "))
+     ("user key over a default one" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((eval (if (fboundp 'evil-define-key)
+                        (evil-define-key 'normal mw-thesaurus-mode-map "x" #'mw-thesaurus--quit)
+                      (define-key mw-thesaurus-mode-map (kbd "C-c C-c") #'mw-thesaurus--quit)))
+              (cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (profile-keys ("C-c" "C-c") ("x")) (pause 1)
+              (eval (if (fboundp 'evil-define-key)
+                        (evil-define-key 'normal mw-thesaurus-mode-map "x" nil)
+                      (define-key mw-thesaurus-mode-map (kbd "C-c C-c") nil))))
+      :expect (:no-thesaurus t)))
    (list
     (mw-e2e--word-case "word happy" "happy" :shows "^\\* happy " :only "happy")
     (mw-e2e--word-case "word Happy" "Happy" :shows "^\\* happy " :only "happy")
@@ -204,8 +214,8 @@ say what the thesaurus shows passes whatever entries come back."
       :expect (:shows "^\\* happy "))))
   "The cases: (LABEL :text :point :tags :steps :expect).
 Steps are (cmd NAME), (keys KEY...) in tmux names, (type TEXT),
-\(region VANILLA-KEYS EVIL-KEYS), (search TEXT), (eval FORM),
-\(wait-prompt), (wait-done [SECONDS QUIET]) and (pause SECONDS).")
+\(region or profile-keys VANILLA-KEYS EVIL-KEYS), (search TEXT),
+\(eval FORM), (wait-prompt), (wait-done [SECONDS QUIET]), (pause SECONDS).")
 
 (defun mw-e2e--selected-cases (profile)
   "Return the cases PROFILE runs: all for vanilla, the flow cases for evil."
@@ -326,7 +336,7 @@ Return what it reports about itself."
          (progn (mw-e2e--type name command) (mw-e2e--keys name "Enter") nil)))
     (`(keys . ,keys) (apply #'mw-e2e--keys name keys) nil)
     (`(type ,text) (mw-e2e--type name text) nil)
-    (`(region ,vanilla ,evil)
+    (`(,(or 'region 'profile-keys) ,vanilla ,evil)
      (apply #'mw-e2e--keys name (if (equal profile "evil") evil vanilla)) nil)
     (`(search ,text)
      (if (equal profile "evil")
@@ -404,7 +414,7 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
       (when (and origin (not (plist-get origin :text-ok)))
         (fail "the text of e2e.txt changed"))
       (when thesaurus
-        (unless (eq (plist-get thesaurus :mode) 'org-mode) (fail "thesaurus not in org-mode"))
+        (unless (plist-get thesaurus :org) (fail "thesaurus not in org-mode"))
         (unless (plist-get thesaurus :mw) (fail "mw-thesaurus-mode off"))
         (unless (plist-get thesaurus :read-only) (fail "thesaurus buffer writable")))
       (when (plist-get state :minibuffer) (fail "a prompt is left open"))

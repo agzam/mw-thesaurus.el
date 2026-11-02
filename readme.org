@@ -47,6 +47,14 @@ It is on [[https://melpa.org/#/mw-thesaurus][MELPA]].
      (window-width . 0.3))))
 #+end_src
 
+*** Doom/Evil users may want to remap org specific keys
+
+#+begin_src emacs-lisp
+(map! :map mw-thesaurus-mode-map
+   [remap evil-record-macro] #'mw-thesaurus--quit
+   [remap org-dwim-at-point] #'mw-thesaurus-lookup-at-point)
+#+end_src
+
 * Commands
 ~mw-thesaurus-lookup-dwim~ - bind that to any desired hotkey, and it would automatically search for a thesaurus definition using the region (if you have any text selected) or a word at the point, or if there's nothing - it prompts you for a word.
 
