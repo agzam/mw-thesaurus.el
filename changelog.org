@@ -3,7 +3,7 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
-* [Unreleased]
+* [1.2.0] - 2026-11-01
 
 ** Changed
 - lookups use Merriam-Webster's v3 JSON API, the data the website shows: "tenacity" and "mice" have entries, and "weakest" shows "weak"
