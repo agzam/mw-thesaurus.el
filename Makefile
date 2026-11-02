@@ -1,4 +1,4 @@
-.PHONY: help deps test lint checkdoc check-compile clean
+.PHONY: help deps test lint checkdoc check-compile e2e clean
 
 ELPA := $(CURDIR)/.elpa
 SANDBOX := $(CURDIR)/.sandbox
@@ -23,6 +23,7 @@ help:
 	@echo "  make lint          Run package-lint"
 	@echo "  make checkdoc      Run checkdoc"
 	@echo "  make check-compile Check for clean byte-compilation"
+	@echo "  make e2e           Type the E2E cases into emacs -nw -q, beside origin/master"
 	@echo "  make clean         Remove compiled files and the sandbox"
 
 deps:
@@ -60,6 +61,11 @@ check-compile:
 	  || { rm -f *.elc; exit 1; }
 	@rm -f *.elc
 
+# keystrokes into emacs -nw -q under tmux, against the real API and
+# origin/master; needs tmux, Emacs 29 or newer and the network
+e2e:
+	$(EMACS) -l test/mw-thesaurus-e2e.el -f mw-e2e-main
+
 clean:
 	rm -f *.elc
-	rm -rf $(ELPA) $(SANDBOX)
+	rm -rf $(ELPA) $(SANDBOX) .e2e
