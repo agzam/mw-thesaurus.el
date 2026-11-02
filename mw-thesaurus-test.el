@@ -4,6 +4,7 @@
 
 (require 'cl-lib)
 (require 'json)
+(require 'package)
 (require 'mw-thesaurus)
 
 (defun mw-thesaurus-test--asset (file)
@@ -13,11 +14,16 @@
       (insert-file-contents (expand-file-name file "assets")))
     (buffer-string)))
 
+(defun mw-thesaurus-test--insert-response (body)
+  "Insert an HTTP response with BODY the way `url-retrieve' leaves it."
+  (set-buffer-multibyte nil)
+  (insert "HTTP/1.1 200 OK\nContent-Type: application/json\n\n"
+          (encode-coding-string body 'utf-8)))
+
 (defun mw-thesaurus-test--read (body)
-  "Parse BODY the way `request' runs `mw-thesaurus--read-response'."
+  "Parse BODY, sent as an HTTP response, with `mw-thesaurus--read-response'."
   (with-temp-buffer
-    (insert body)
-    (goto-char (point-min))
+    (mw-thesaurus-test--insert-response body)
     (mw-thesaurus--read-response)))
 
 (ert-deftest mw-thesaurus--parse-test ()
@@ -61,22 +67,19 @@ Only WORDS have entries.  Any other word gets SUGGESTIONS."
 (defun mw-thesaurus-test--call (respond lookup-fn)
   "Call LOOKUP-FN against a fake thesaurus API.
 RESPOND takes the requested word and returns the response body, or an
-error for the :error callback.  Return a plist of the request URLs, the
+error for the callback status.  Return a plist of the request URLs, the
 texts sent to the thesaurus buffer and the echo area messages."
   (let (urls rendered messages)
-    (cl-letf (((symbol-function 'request)
-               (lambda (url &rest settings)
+    (cl-letf (((symbol-function 'url-retrieve)
+               (lambda (url callback &rest _)
                  (push url urls)
                  (string-match "/json/\\([^?]*\\)" url)
                  (let ((body (funcall respond
                                       (url-unhex-string (match-string 1 url)))))
-                   (if (stringp body)
-                       (funcall (plist-get settings :success)
-                                :data (with-temp-buffer
-                                        (insert body)
-                                        (goto-char (point-min))
-                                        (funcall (plist-get settings :parser))))
-                     (funcall (plist-get settings :error) :error-thrown body)))))
+                   (with-temp-buffer
+                     (when (stringp body)
+                       (mw-thesaurus-test--insert-response body))
+                     (funcall callback (unless (stringp body) (list :error body)))))))
               ((symbol-function 'mw-thesaurus--create-buffer)
                (lambda (dict-str) (push dict-str rendered)))
               ((symbol-function 'message)
@@ -192,11 +195,37 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
 
 (ert-deftest mw-thesaurus-lookup-reports-request-failure-test ()
   (let ((result (mw-thesaurus-test--call
-                 (lambda (_) '(error . "exited abnormally with code 6"))
+                 (lambda (_) '(error http 503))
                  (lambda () (mw-thesaurus--lookup-word "happy")))))
     (should-not (plist-get result :rendered))
-    (should (equal '("Merriam-Webster request failed: (error . \"exited abnormally with code 6\")")
+    (should (equal '("Merriam-Webster request failed: (error http 503)")
                    (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus--create-buffer-reuses-the-thesaurus-window-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+        (shown (window-buffer))
+        popped)
+    (unwind-protect
+        (cl-letf (((symbol-function 'switch-to-buffer-other-window)
+                   (lambda (buffer &rest _) (push buffer popped))))
+          (mw-thesaurus--create-buffer "* first ~noun~\n")
+          (should (equal 1 (length popped)))
+          (set-window-buffer nil mw-thesaurus-buffer-name)
+          ;; A `url-retrieve' callback runs in a buffer of its own.
+          (with-temp-buffer
+            (mw-thesaurus--create-buffer "* second ~noun~\n"))
+          (should (equal 1 (length popped)))
+          (should (equal "* second ~noun~\n"
+                         (with-current-buffer mw-thesaurus-buffer-name
+                           (buffer-string)))))
+      (set-window-buffer nil shown)
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-package-requires-test ()
+  (with-temp-buffer
+    (insert-file-contents "mw-thesaurus.el")
+    (should (equal '(emacs)
+                   (mapcar #'car (package-desc-reqs (package-buffer-info)))))))
 
 (provide 'mw-thesaurus-test)
 ;;; mw-thesaurus-test.el ends here

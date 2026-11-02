@@ -5,7 +5,7 @@
 ;; Created: Nov-2017
 ;; Keywords: wp, matching
 ;; License: GPL v3
-;; Package-Requires: ((emacs "27.1") (request "0.3.0") (dash "2.16.0"))
+;; Package-Requires: ((emacs "27.1"))
 ;; Version: 1.2.0
 
 ;;; Commentary:
@@ -35,11 +35,12 @@
 ;;
 ;;; Code:
 
-(require 'request)
+(require 'url)
 (require 'thingatpt)
 (require 'json)
 (require 'org)
-(require 'dash)
+(require 'seq)
+(require 'subr-x)
 
 (defgroup mw-thesaurus nil
   "Merriam-Webster Thesaurus."
@@ -87,21 +88,21 @@
 (defun mw-thesaurus--format-text (text)
   "Turn the Merriam-Webster markup in TEXT into Org markup."
   (string-trim
-   (-reduce-from
+   (seq-reduce
     (lambda (acc rule)
       (replace-regexp-in-string (car rule) (cdr rule) acc t))
-    text
     ;; Zero-width spaces let Org see the emphasis inside a word.
     '(("{it}\\([^{]*\\){/it}" . "\u200b/\\1/\u200b")
       ("{[a-z_]+|\\([^|}]*\\)[^}]*}" . "\\1")
-      ("{[^}]*}" . "")))))
+      ("{[^}]*}" . ""))
+    text)))
 
 (defun mw-thesaurus--senses (entry)
   "Return the senses of ENTRY, a parsed thesaurus entry."
-  (->> (alist-get 'def entry)
-       (--mapcat (apply #'append (alist-get 'sseq it)))
-       (--filter (equal "sense" (car it)))
-       (-map #'cadr)))
+  (thread-last (alist-get 'def entry)
+    (seq-mapcat (lambda (def) (apply #'append (alist-get 'sseq def))))
+    (seq-filter (lambda (item) (equal "sense" (car item))))
+    (mapcar #'cadr)))
 
 (defun mw-thesaurus--format-sense (sense)
   "Format SENSE as an Org subtree: meaning, examples and word lists."
@@ -131,25 +132,30 @@
              " ~" (alist-get 'fl entry) "~\n"
              (mapconcat #'mw-thesaurus--format-sense
                         (mw-thesaurus--senses entry) "")))
-   (-remove #'stringp data) ""))
+   (seq-remove #'stringp data) ""))
 
 (defun mw-thesaurus--suggestions (data)
   "Return the spelling suggestions in DATA, a response without entries."
-  (-filter #'stringp data))
+  (seq-filter #'stringp data))
 
 (defun mw-thesaurus--read-response ()
-  "Parse the API response in the current buffer.
+  "Parse the HTTP response in the current `url-retrieve' buffer.
 Return the body text when it is not JSON, e.g. a key error."
-  (condition-case nil
-      (let ((json-array-type 'list))
-        (json-read))
-    (json-error (string-trim (buffer-string)))))
+  (goto-char (point-min))
+  (re-search-forward "\r?\n\r?\n" nil 'move)
+  (let ((body (decode-coding-string
+               (buffer-substring-no-properties (point) (point-max)) 'utf-8)))
+    (condition-case nil
+        (let ((json-array-type 'list))
+          (json-read-from-string body))
+      (json-error (string-trim body)))))
 
 (defun mw-thesaurus--create-buffer (dict-str)
   "Show DICT-STR, the thesaurus entries in Org format, in the thesaurus buffer."
   (let ((temp-buf (get-buffer-create mw-thesaurus-buffer-name)))
     ;; (print temp-buf)
-    (unless (bound-and-true-p mw-thesaurus-mode)
+    ;; The `url-retrieve' callback runs in the response buffer, not the user's.
+    (unless (buffer-local-value 'mw-thesaurus-mode (window-buffer))
       (switch-to-buffer-other-window temp-buf))
     (set-buffer temp-buf)
     (with-current-buffer temp-buf
@@ -166,32 +172,30 @@ Return the body text when it is not JSON, e.g. a key error."
 When WORD has no entry, look up its first spelling suggestion if that is
 one or two edits away.  MISSED-WORD is the word that had no entry; it
 goes to the echo area and prevents a second fallback."
-  (request (concat mw-thesaurus--base-url (url-hexify-string word)
-                   "?key=" mw-thesaurus-api-key)
-    :parser #'mw-thesaurus--read-response
-    :error
-    (cl-function
-     (lambda (&key error-thrown &allow-other-keys)
-       (message "Merriam-Webster request failed: %S" error-thrown)))
-    :success
-    (cl-function
-     (lambda (&key data &allow-other-keys)
-       (if (stringp data)
-           (message "Merriam-Webster: %s" data)
-         (let ((dict-str (mw-thesaurus--parse data))
-               (suggestion (car (mw-thesaurus--suggestions data))))
-           (cond
-            ((< 0 (length dict-str))
-             (mw-thesaurus--create-buffer dict-str)
-             (when missed-word
-               (message "No Merriam-Webster entry for \"%s\", showing \"%s\""
-                        missed-word word)))
-            ((and suggestion (not missed-word)
-                  (< 0 (string-distance (downcase word) (downcase suggestion)) 3))
-             (mw-thesaurus--lookup-word suggestion word))
-            (t
-             (message "No Merriam-Webster entry for \"%s\""
-                      (or missed-word word))))))))))
+  (url-retrieve
+   (concat mw-thesaurus--base-url (url-hexify-string word)
+           "?key=" mw-thesaurus-api-key)
+   (lambda (status)
+     (let* ((err (plist-get status :error))
+            (data (unless err (mw-thesaurus--read-response)))
+            (dict-str (and (listp data) (mw-thesaurus--parse data)))
+            (suggestion (and (listp data) (car (mw-thesaurus--suggestions data)))))
+       (kill-buffer)
+       (cond
+        (err (message "Merriam-Webster request failed: %S" err))
+        ((stringp data) (message "Merriam-Webster: %s" data))
+        ((< 0 (length dict-str))
+         (mw-thesaurus--create-buffer dict-str)
+         (when missed-word
+           (message "No Merriam-Webster entry for \"%s\", showing \"%s\""
+                    missed-word word)))
+        ((and suggestion (not missed-word)
+              (< 0 (string-distance (downcase word) (downcase suggestion)) 3))
+         (mw-thesaurus--lookup-word suggestion word))
+        (t
+         (message "No Merriam-Webster entry for \"%s\""
+                  (or missed-word word))))))
+   nil t t))
 
 (defun mw-thesaurus-get-original-word (beginning end)
   "Get a word to look for from the user.
