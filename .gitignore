@@ -1,0 +1,4 @@
+*.elc
+.elpa/
+.sandbox/
+.e2e/

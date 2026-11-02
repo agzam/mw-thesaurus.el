@@ -1,39 +1,42 @@
 * Merriam-Webster Thesaurus
-  For more than 150 years, in print and now online, Merriam-Webster has been America's leading and most-trusted provider of language information.
+[[https://github.com/agzam/mw-thesaurus.el/actions/workflows/run-tests.yml][https://github.com/agzam/mw-thesaurus.el/actions/workflows/run-tests.yml/badge.svg]]
 
-  This package allows you to lookup a word and displays its thesaurus definition in a pleasing outline (Org-mode) format
+For more than 150 years, in print and now online, Merriam-Webster has been America's leading and most-trusted provider of language information.
+
+This package allows you to lookup a word and displays its thesaurus definition in a pleasing outline (Org-mode) format
 
 [[file:assets/thesaurus.gif]]
 
 * Configure
-*** This is entirely optional, and you don't have to do it at all (not required for the package to work), but you may want to do it anyway: 
-  In order to use Merriam Webster API, it is necessary to register (for free) and obtain an API Key.
-  By default, this package uses my own registered key; for whatever reason, if you rather use your own key or the default one stops working, then you'd need to do this. I've been using mine for years, and it still works fine, but I can imagine some kind of spam detection mechanism adding the key into the block-list. Well, if that happens, just register a new account (again, you don't have to pay for it, and it takes a minute):
-  - [[https://www.dictionaryapi.com/register/index.htm][Register free account]] at Merriam-Webster's Developer Center
-  - Obtain a key for Merriam-Webster Thesaurus
-  - Set the variable
+** Entirely optional, and you don't have to do it at all
+Again, *this is not required for the package to work!* You may want to do it anyway.
+
+In order to use the Merriam-Webster API, it is necessary to register and obtain a free API key.
+
+A free key allows like 1000 lookups a day, and every user of this package shares the default one.
+
+Whether Merriam-Webster enforces the limit is unknown, because the API sends no rate-limit headers.
+
+By default, this package uses one registered key; for whatever reason, if you prefer your own or the default fails, then set a new key.
+
+People have been actively using the package for many years, and the key still works just fine, yet I could imagine some kind of spam detection upstream block-listing the key. Well, if that happens, just get a free account and set a key.
+
+- [[https://www.dictionaryapi.com/register/index.htm][Register free account]] at Merriam-Webster's Developer Center
+- Obtain a key
+- Set the var
   #+begin_src emacs-lisp
-    (setq mw-thesaurus-api-key "YOUR-API-KEY")
+  (setq mw-thesaurus-api-key "YOUR-API-KEY")
   #+end_src
 
-*** Spacemacs layer
-Spacemacs users can easily add the package to ~dotspacemacs-additional-packages~ and start using it, or even add it to be part of a custom layer, [[https://github.com/agzam/dot-spacemacs/blob/master/layers/ag-lang-tools/packages.el#L20][see an example]].
+It is on [[https://melpa.org/#/mw-thesaurus][MELPA]].
 
-*** Doom module
-=packages.el=:
+*** use-package example
 #+begin_src emacs-lisp
-(package! mw-thesaurus)
-#+end_src
-
-=config.el= example:
-#+begin_src emacs-lisp
-(use-package! mw-thesaurus
+(use-package mw-thesaurus
   :defer t
   :commands mw-thesaurus-lookup-dwim
   :hook (mw-thesaurus-mode . variable-pitch-mode)
   :config
-  (map! :map mw-thesaurus-mode-map [remap evil-record-macro] #'mw-thesaurus--quit)
-
   ;; window on the right side
   (add-to-list
    'display-buffer-alist
@@ -46,10 +49,10 @@ Spacemacs users can easily add the package to ~dotspacemacs-additional-packages~
 #+end_src
 
 * Commands
-  ~mw-thesaurus-lookup-dwim~ - bind that to any desired hotkey, and it would automatically search for a thesaurus definition using the region (if you have any text selected) or a word at the point, or if there's nothing - it prompts you for a word.
+~mw-thesaurus-lookup-dwim~ - bind that to any desired hotkey, and it would automatically search for a thesaurus definition using the region (if you have any text selected) or a word at the point, or if there's nothing - it prompts you for a word.
 
-  If the word has no entry, e.g. because of a typo, the first spelling suggestion from Merriam-Webster shows instead: "hapy" shows "happy".
+If the word has no entry, e.g. because of a typo, the first spelling suggestion from Merriam-Webster shows instead, but only when it differs by one or two letters: "hapy" shows "happy", while "etymology" shows nothing rather than "homology".
 * Keys available in mw-thesaurus-mode
-  ~RET~ lookup for the word at the cursor (lets you "drill" into definition further)
+~RET~ lookup for the word at the cursor (lets you "drill" into definition further)
 
-  ~q~ kill mw-thesaurus buffer and close the window
+~q~ kill mw-thesaurus buffer and close the window

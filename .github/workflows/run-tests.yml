@@ -1,0 +1,32 @@
+---
+name: Run Tests
+on: [push, pull_request]
+jobs:
+  Testing:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        emacs-version: ['27.1', '31.1']
+    steps:
+      - name: Check out
+        uses: actions/checkout@main
+
+      - name: Install Emacs
+        uses: purcell/setup-emacs@master
+        with:
+          version: ${{ matrix.emacs-version }}
+
+      - name: Install dependencies
+        run: make deps
+
+      - name: Run tests
+        run: make test
+
+      - name: Check byte-compilation
+        run: make check-compile
+
+      - name: Lint
+        run: make lint
+
+      - name: Checkdoc
+        run: make checkdoc

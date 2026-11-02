@@ -1,52 +1,54 @@
 ;;; mw-thesaurus.el --- Merriam-Webster Thesaurus -*- lexical-binding: t; -*-
 ;;
-;; Author: Ag Ibragimov
+;; Author: Ag Ibragimov <agzam.ibragimov@gmail.com>
 ;; URL: https://github.com/agzam/mw-thesaurus.el
 ;; Created: Nov-2017
 ;; Keywords: wp, matching
 ;; License: GPL v3
-;; Package-Requires: ((emacs "26.1") (request "0.3.0") (dash "2.16.0"))
-;; Version: 1.1.0
-
-;;; Commentary:
-
-;; Thesaurus look up through www.dictionaryapi.com - Merriam-Webster online dictionary
+;; Package-Requires: ((emacs "27.1"))
+;; Version: 1.2.0
 ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; For more than 150 years, in print and now online, Merriam-Webster has been America's leading and most-trusted provider of language information.
-;; Each month, Merriam-Webster web sites offer guidance to more than 40 million visitors. In print, publications include Merriam-Webster's Collegiate Dictionary (among the best-selling books in American history) and newly published dictionaries for English-language learners.
-;; All Merriam-Webster products and services are backed by the largest team of professional dictionary editors and writers in America, and one of the largest in the world.
-;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation, either version 3 of the License, or
 ;; (at your option) any later version.
-
+;;
 ;; This program is distributed in the hope that it will be useful,
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU General Public License for more details.
-
+;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
-;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
+
+;;; Commentary:
+
+;; Look up a word in the Merriam-Webster thesaurus at dictionaryapi.com and
+;; read its meanings, synonyms and antonyms in an Org buffer.
+;; `mw-thesaurus-lookup-dwim' looks up the region, the word at point, or a
+;; word it asks for.
+
 ;;; Code:
 
-(require 'request)
+(require 'url)
 (require 'thingatpt)
-(require 'xml)
+(require 'json)
 (require 'org)
-(require 'dash)
-
+(require 'seq)
+(require 'subr-x)
+(require 'ucs-normalize)
+
 (defgroup mw-thesaurus nil
   "Merriam-Webster Thesaurus."
   :prefix "mw-thesaurus-"
   :group 'applications)
 
-(defvar mw-thesaurus-mode-map (make-sparse-keymap)
+(defvar mw-thesaurus-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map [remap org-open-at-point] #'mw-thesaurus-lookup-at-point)
+    (define-key map (kbd "RET") #'mw-thesaurus-lookup-at-point)
+    (define-key map (kbd "q") #'mw-thesaurus--quit)
+    map)
   "Keymap for minor mode variable `mw-thesaurus-mode'.")
 
 (defvar mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *"
@@ -60,156 +62,147 @@
   :init-value nil
   :keymap mw-thesaurus-mode-map
   (read-only-mode 1))
-
-(define-key mw-thesaurus-mode-map [remap org-open-at-point] #'mw-thesaurus-lookup-at-point)
-(define-key mw-thesaurus-mode-map (kbd "q") #'mw-thesaurus--quit)
 
 (defcustom mw-thesaurus-api-key
   "67d977d5-790b-412e-a547-9dbcc2bcd525"
   "Merriam-Webster API access key."
   :type 'string)
 
-(defcustom mw-thesaurus--base-url
-  "http://www.dictionaryapi.com/api/v1/references/thesaurus/xml/"
-  "Merriam-Webster API base URL."
-  :type 'string)
-
-(defun mw-thesaurus--get-xml-node (root path)
-  "From parsed xml ROOT retrieves a node for given PATH.
+;; A package upgrade reloads this file; a defcustom would keep the old URL.
+(defconst mw-thesaurus--api-url
+  "https://www.dictionaryapi.com/api/v3/references/thesaurus/json/"
+  "Merriam-Webster thesaurus API URL.")
 
-Usage: `(mw-thesaurus--get-xml-node html-root '(html head title))`"
-  (let ((current-node (xml-get-children root (car path))))
-    (if (< 1 (length path))
-        (mw-thesaurus--get-xml-node (car current-node) (cdr path))
-      current-node)))
-
-(defun mw-thesaurus--italicize (prop)
-  "Check for element PROP containing <it> tag.
-Retrieves content, resulting string is placed between '/' and
-'/'."
-  (let ((its (mw-thesaurus--get-xml-node prop '(it))))
-    (mapconcat
-     (lambda (e)
-       (if (member e its)
-           (concat "​/" (-> e last car string-trim) "/​")
-         (when (stringp e ) e)))
-     prop "")))
-
-(defun mw-thesaurus--snd-subs (article)
-  "Second level of ARTICLE."
-  (let* ((whole-sub (-> article
-                        (mw-thesaurus--get-xml-node '(vi)) car))
-         (sub-str (mw-thesaurus--italicize whole-sub)))
-    (concat "   - " sub-str)))
-
-(defun mw-thesaurus--other-tag (article tag-type)
-  "Parse ARTICLE for different TAG-TYPE."
-  (let ((content (-> article
-                     (mw-thesaurus--get-xml-node `(,tag-type))
-                     car
-                     mw-thesaurus--italicize))
-        (title (cond
-                ((eq tag-type 'syn) "Synonyms")
-                ((eq tag-type 'rel) "Related words")
-                ((eq tag-type 'near) "Near antonyms")
-                ((eq tag-type 'ant) "Antonyms")
-                (t "Unknown type"))))
-    (when (and content (< 0 (length content)))
-      (string-join (list "\n*** "
-                         title ":\n " (replace-regexp-in-string ";" "\n " content t
-                                                                t)) ""))))
-
-(defun mw-thesaurus--third-lvl (article)
-  "Third level of ARTICLE."
-  (let ((syns (mw-thesaurus--other-tag article 'syn))
-        (rels (mw-thesaurus--other-tag article 'rel))
-        (nears (mw-thesaurus--other-tag article 'near))
-        (ants (mw-thesaurus--other-tag article 'ant)))
-    (string-join (list syns rels nears ants) "")))
-
-(defun mw-thesaurus--snd-level (entry)
-  "Second level of ENTRY."
-  (let ((articles (mw-thesaurus--get-xml-node entry '(sens))))
-    (mapconcat
-     (lambda (article)
-       (let ((desc (-> (mw-thesaurus--get-xml-node article '(mc))
-                       car
-                       mw-thesaurus--italicize))
-             (snd-subs (mw-thesaurus--snd-subs article))
-             (third-lvl (mw-thesaurus--third-lvl article)))
-         (string-join (list "** " desc "\n" snd-subs third-lvl) "")))
-     articles
-     "\n")))
-
-(defun mw-thesaurus--get-title (entry)
-  "Title for ENTRY."
-  (-> (mw-thesaurus--get-xml-node entry '(term hw))
-      car (seq-drop 2) car))
-
-(defun mw-thesaurus--get-type (entry)
-  "Type of the ENTRY is at <fl> tag."
-  (-> (mw-thesaurus--get-xml-node entry '(fl))
-      car (seq-drop 2) car))
-
-(defun mw-thesaurus--parse (xml-data)
-  "Parse xml returned by Merriam-Webster dictionary API.
+(defconst mw-thesaurus--word-lists
+  '((syn_list . "Synonyms")
+    (sim_list . "Synonyms & similar words")
+    (rel_list . "Related words")
+    (phrase_list . "Phrases")
+    (near_list . "Near antonyms")
+    (ant_list . "Antonyms")
+    (opp_list . "Antonyms & near antonyms"))
+  "Word lists of a sense in display order, with their headings.")
 
-Take XML-DATA, Returns multi-line text in ‘org-mode’ format."
-  (let* ((entry-list (assq 'entry_list xml-data))
-         (entries (xml-get-children entry-list 'entry)))
-    (mapconcat
-     (lambda (entry)
-       (let ((fst-level (concat "* " (mw-thesaurus--get-title entry)
-                                " ~" (mw-thesaurus--get-type entry) "~\n"))
-             (snd-level (mw-thesaurus--snd-level entry)))
-         (string-join (list fst-level snd-level) "")))
-     entries "\n")))
+(defun mw-thesaurus--format-text (text)
+  "Turn the Merriam-Webster markup in TEXT into Org markup."
+  (string-trim
+   (seq-reduce
+    (lambda (acc rule)
+      (replace-regexp-in-string (car rule) (cdr rule) acc t))
+    ;; Zero-width spaces let Org see the emphasis inside a word.
+    '(("{it}\\([^{]*\\){/it}" . "\u200b/\\1/\u200b")
+      ("{[a-z_]+|\\([^|}]*\\)[^}]*}" . "\\1")
+      ("{[^}]*}" . ""))
+    text)))
 
-(defun mw-thesaurus--suggestions (xml-data)
-  "Return the spelling suggestions in XML-DATA, a response without entries."
-  (mapcar (lambda (node) (car (xml-node-children node)))
-          (xml-get-children (assq 'entry_list xml-data) 'suggestion)))
+(defun mw-thesaurus--senses (entry)
+  "Return the senses of ENTRY, a parsed thesaurus entry."
+  (thread-last (alist-get 'def entry)
+    (seq-mapcat (lambda (def) (apply #'append (alist-get 'sseq def))))
+    (seq-filter (lambda (item) (equal "sense" (car item))))
+    (mapcar #'cadr)))
+
+(defun mw-thesaurus--format-sense (sense)
+  "Format SENSE as an Org subtree: meaning, examples and word lists."
+  (let ((dt (alist-get 'dt sense)))
+    (concat
+     "** " (mw-thesaurus--format-text (or (cadr (assoc "text" dt)) "")) "\n"
+     (mapconcat (lambda (vis)
+                  (concat "   - " (mw-thesaurus--format-text (alist-get t vis)) "\n"))
+                (cadr (assoc "vis" dt)) "")
+     (mapconcat
+      (lambda (word-list)
+        (when-let* ((groups (alist-get (car word-list) sense)))
+          (concat "*** " (cdr word-list) ":\n"
+                  (mapconcat (lambda (group)
+                               (concat "    "
+                                       (mapconcat (lambda (word) (alist-get 'wd word))
+                                                  group ", ")
+                                       "\n"))
+                             groups ""))))
+      mw-thesaurus--word-lists ""))))
+
+(defun mw-thesaurus--parse (data)
+  "Format the entries in DATA, a parsed API response, as Org text."
+  (mapconcat
+   (lambda (entry)
+     (concat "* " (alist-get 'hw (alist-get 'hwi entry))
+             " ~" (alist-get 'fl entry) "~\n"
+             (mapconcat #'mw-thesaurus--format-sense
+                        (mw-thesaurus--senses entry) "")))
+   (seq-remove #'stringp data) ""))
+
+(defun mw-thesaurus--fold (word)
+  "Return WORD without diacritics; the API matches only plain letters."
+  (concat (seq-remove (lambda (char)
+                        (eq 'Mn (get-char-code-property char 'general-category)))
+                      (ucs-normalize-NFD-string word))))
+
+(defun mw-thesaurus--suggestions (data)
+  "Return the spelling suggestions in DATA, a response without entries."
+  (seq-filter #'stringp data))
+
+(defun mw-thesaurus--read-response ()
+  "Parse the HTTP response in the current `url-retrieve' buffer.
+Return the body text when it is not JSON, e.g. a key error."
+  (goto-char (point-min))
+  (re-search-forward "\r?\n\r?\n" nil 'move)
+  (let ((body (decode-coding-string
+               (buffer-substring-no-properties (point) (point-max)) 'utf-8)))
+    (condition-case nil
+        (let ((json-array-type 'list))
+          (json-read-from-string body))
+      (json-error (string-trim body)))))
 
 (defun mw-thesaurus--create-buffer (dict-str)
   "Show DICT-STR, the thesaurus entries in Org format, in the thesaurus buffer."
   (let ((temp-buf (get-buffer-create mw-thesaurus-buffer-name)))
     ;; (print temp-buf)
-    (unless (bound-and-true-p mw-thesaurus-mode)
-      (switch-to-buffer-other-window temp-buf))
+    ;; The `url-retrieve' callback runs in the response buffer, not the user's.
+    (unless (buffer-local-value 'mw-thesaurus-mode (window-buffer))
+      ;; Keys typed at an open prompt must stay in the prompt.
+      (if (active-minibuffer-window)
+          (display-buffer temp-buf t)
+        (switch-to-buffer-other-window temp-buf)))
     (set-buffer temp-buf)
     (with-current-buffer temp-buf
       (let ((inhibit-read-only t)
             (org-hide-emphasis-markers t))
         (erase-buffer)
-        (insert (decode-coding-string dict-str 'dos)))
+        (insert dict-str))
       (org-mode)
       (mw-thesaurus-mode)
       (goto-char (point-min)))))
 
 (defun mw-thesaurus--lookup-word (word &optional missed-word)
   "Look up WORD and show its thesaurus entries.
-When WORD has no entry, look up its first spelling suggestion instead.
-MISSED-WORD is the word that had no entry; it goes to the echo area and
-prevents a second fallback."
-  (request (concat mw-thesaurus--base-url (url-hexify-string word)
-                   "?key=" mw-thesaurus-api-key)
-    :parser (lambda () (xml-parse-region (point-min) (point-max)))
-    :success
-    (cl-function
-     (lambda (&key data &allow-other-keys)
-       (let ((dict-str (mw-thesaurus--parse data))
-             (suggestion (car (mw-thesaurus--suggestions data))))
-         (cond
-          ((< 0 (length dict-str))
-           (mw-thesaurus--create-buffer dict-str)
-           (when missed-word
-             (message "No Merriam-Webster entry for \"%s\", showing \"%s\""
-                      missed-word word)))
-          ((and suggestion (not missed-word))
-           (mw-thesaurus--lookup-word suggestion word))
-          (t
-           (message "No Merriam-Webster entry for \"%s\""
-                    (or missed-word word)))))))))
+When WORD has no entry, look up its first spelling suggestion if that is
+one or two edits away.  MISSED-WORD is the word that had no entry; it
+goes to the echo area and prevents a second fallback."
+  (url-retrieve
+   (concat mw-thesaurus--api-url (url-hexify-string (mw-thesaurus--fold word))
+           "?key=" mw-thesaurus-api-key)
+   (lambda (status)
+     (let* ((err (plist-get status :error))
+            (data (unless err (mw-thesaurus--read-response)))
+            (dict-str (and (listp data) (mw-thesaurus--parse data)))
+            (suggestion (and (listp data) (car (mw-thesaurus--suggestions data)))))
+       (kill-buffer)
+       (cond
+        (err (message "Merriam-Webster request failed: %S" err))
+        ((stringp data) (message "Merriam-Webster: %s" (car (split-string data "\n"))))
+        ((< 0 (length dict-str))
+         (mw-thesaurus--create-buffer dict-str)
+         (when missed-word
+           (message "No Merriam-Webster entry for \"%s\", showing \"%s\""
+                    missed-word word)))
+        ((and suggestion (not missed-word)
+              (< 0 (string-distance (downcase word) (downcase suggestion)) 3))
+         (mw-thesaurus--lookup-word suggestion word))
+        (t
+         (message "No Merriam-Webster entry for \"%s\""
+                  (or missed-word word))))))
+   nil t t))
 
 (defun mw-thesaurus-get-original-word (beginning end)
   "Get a word to look for from the user.
@@ -266,7 +259,7 @@ otherwise as for word using mw-thesaurus-lookup-word"
 
 ;;;###autoload
 (defun mw-thesaurus-lookup (&optional beginning end)
-  "Look up a thesaurus definition for word using Merriam-Webster online dictionary.
+  "Look up a thesaurus definition using Merriam-Webster online dictionary.
 `BEGINNING' and `END' correspond to the selected text with a word to look up.
 If there is no selection provided, additional input will be required."
   (interactive
