@@ -33,8 +33,7 @@ It is on [[https://melpa.org/#/mw-thesaurus][MELPA]].
 *** use-package example
 #+begin_src emacs-lisp
 (use-package mw-thesaurus
-  :defer t
-  :commands mw-thesaurus-lookup-dwim
+  :bind ("C-c t" . mw-thesaurus-lookup-dwim)
   :hook (mw-thesaurus-mode . variable-pitch-mode)
   :config
   ;; window on the right side
