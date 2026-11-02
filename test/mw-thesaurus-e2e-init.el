@@ -134,6 +134,12 @@
                            (point-min) (save-excursion (goto-char (point-min))
                                                        (line-end-position)))
                     :entries (count-matches "^\\* " (point-min) (point-max))
+                    :heads (save-excursion
+                             (goto-char (point-min))
+                             (let (heads)
+                               (while (re-search-forward "^\\* .*" nil t)
+                                 (push (match-string-no-properties 0) heads))
+                               (nreverse heads)))
                     :senses (count-matches "^\\*\\* " (point-min) (point-max))
                     :mode major-mode
                     :mw (bound-and-true-p mw-thesaurus-mode)
