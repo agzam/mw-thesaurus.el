@@ -1,0 +1,60 @@
+#+TITLE: mw-thesaurus.el changelog
+#+AUTHOR: Ag Ibragimov
+
+Changes to the project, following Keep a Changelog conventions.
+
+* [Unreleased]
+
+** Changed
+- lookups use Merriam-Webster's v3 JSON API, the data the website shows: "tenacity" and "mice" have entries, and "weakest" shows "weak"
+- a misspelled word falls back to its first spelling suggestion only when the two differ by one or two letters, so "etymology" no longer shows "genealogy"
+- v3 also lists compound entries: "happy" shows "happy-go-lucky" and "trigger-happy" too
+- the lists under each heading line up again
+- an answer that arrives while a prompt is open no longer takes the focus from it
+- requires Emacs 27.1
+
+** Fixed
+- phrases of three or more words, such as "break the law" and "under the weather"
+- a selection that ends with a space or spans a line break
+- ~RET~ in the thesaurus buffer looks up the word at point, as the readme says
+- a failed request or a bad API key says so in the echo area; a bad key showed "No Merriam-Webster entry"
+
+** Removed
+- the ~request~ and ~dash~ dependencies
+
+* [1.1.0] - 2026-09-26
+
+** Added
+- a misspelled word shows the entry of its first spelling suggestion, and the echo area names both words
+
+** Changed
+- the API key variable is ~mw-thesaurus-api-key~; it was ~mw-thesaurus--api-key~
+- requires Emacs 26.1
+
+** Fixed
+- a selection with a space, such as "give up", is URL-encoded
+- a ~wrong-type-argument keymapp nil~ error
+- a lookup no longer turns on ~org-hide-emphasis-markers~ in every buffer
+
+* [1.0.1] - 2021-02-23
+
+** Added
+- ~mw-thesaurus-lookup-dwim~ looks up the selection, the word at point, or a word it asks for
+- ~mw-thesaurus-lookup~ looks up the selection
+- ~C-c C-o~ in the thesaurus buffer looks up the word at point
+- ~q~ quits the thesaurus buffer and its window
+- autoloads for the commands
+
+** Fixed
+- every entry shows, not only the first
+- the thesaurus buffer opens when it already exists
+- carriage returns in the thesaurus buffer
+
+** Removed
+- the dependency on ~s~
+- the evil-specific ~q~ binding
+
+* [0.0.1] - 2017-09-03
+
+** Added
+- looks up a word at dictionaryapi.com and shows its meanings, examples, synonyms, related words, near antonyms and antonyms as an Org outline
