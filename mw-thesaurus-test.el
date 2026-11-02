@@ -55,13 +55,24 @@
   (should (equal "lacking strength"
                  (mw-thesaurus--format-text "{bc}lacking strength"))))
 
+(defun mw-thesaurus-test--entries (&rest entries)
+  "Return the body of a response with ENTRIES, each (HEADWORD . STEMS)."
+  (concat
+   "["
+   (mapconcat
+    (lambda (entry)
+      (format "{\"meta\":{\"id\":%s,\"stems\":%s},\"hwi\":{\"hw\":%s},\"fl\":\"verb\",
+\"def\":[{\"sseq\":[[[\"sense\",{\"dt\":[[\"text\",\"meaning\"]]}]]]}]}"
+              (json-encode (car entry)) (json-encode (vconcat (cdr entry)))
+              (json-encode (car entry))))
+    entries ",")
+   "]"))
+
 (defun mw-thesaurus-test--response (word words suggestions)
   "Return the body the thesaurus API sends for WORD.
 Only WORDS have entries.  Any other word gets SUGGESTIONS."
   (if (member word words)
-      (format "[{\"meta\":{\"id\":%s},\"hwi\":{\"hw\":%s},\"fl\":\"verb\",
-\"def\":[{\"sseq\":[[[\"sense\",{\"dt\":[[\"text\",\"meaning\"]]}]]]}]}]"
-              (json-encode word) (json-encode word))
+      (mw-thesaurus-test--entries (list word word))
     (json-encode (vconcat suggestions))))
 
 (defun mw-thesaurus-test--call (respond lookup-fn)
@@ -159,6 +170,79 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (should (string-prefix-p "* happy ~verb~"
                              (car (plist-get result :rendered))))
     (should-not (plist-get result :messages))))
+
+(ert-deftest mw-thesaurus-lookup-ignores-entries-of-phrases-test ()
+  (let ((result (mw-thesaurus-test--call
+                 (lambda (_)
+                   (mw-thesaurus-test--entries
+                    '("burn" "burn" "burn the candle at both ends")
+                    '("cut" "cut" "cut both ways")))
+                 (lambda () (mw-thesaurus--lookup-word "Both")))))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should-not (plist-get result :rendered))
+    (should (equal '("No Merriam-Webster entry for \"Both\"")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-lookup-keeps-compounds-of-the-word-test ()
+  (let* ((result (mw-thesaurus-test--call
+                  (lambda (_)
+                    (mw-thesaurus-test--entries
+                     '("happy-go-lucky" "happy-go-lucky")
+                     '("happy" "happy" "happier" "happiest")))
+                  (lambda () (mw-thesaurus--lookup-word "happy"))))
+         (org (car (plist-get result :rendered))))
+    (should (string-match-p "^\\* happy-go-lucky ~verb~$" org))
+    (should (string-match-p "^\\* happy ~verb~$" org))
+    (should-not (plist-get result :messages))))
+
+(ert-deftest mw-thesaurus-lookup-drops-entries-of-phrases-beside-the-word-test ()
+  (let* ((result (mw-thesaurus-test--call
+                  (lambda (_)
+                    (mw-thesaurus-test--entries
+                     '("neither" "neither")
+                     '("neither here nor there" "neither here nor there")
+                     '("fish" "fish" "neither fish nor fowl")))
+                  (lambda () (mw-thesaurus--lookup-word "neither"))))
+         (org (car (plist-get result :rendered))))
+    (should (string-match-p "^\\* neither ~verb~$" org))
+    (should (string-match-p "^\\* neither here nor there ~verb~$" org))
+    (should-not (string-match-p "fish" org))))
+
+(ert-deftest mw-thesaurus-lookup-matches-whole-words-in-headwords-test ()
+  (let* ((result (mw-thesaurus-test--call
+                  (lambda (_)
+                    (mw-thesaurus-test--entries '("is" "is")
+                                                '("is friends with" "is friends with")
+                                                '("this" "this" "this is it")))
+                  (lambda () (mw-thesaurus--lookup-word "is"))))
+         (org (car (plist-get result :rendered))))
+    (should (string-match-p "^\\* is friends with ~verb~$" org))
+    (should-not (string-match-p "this" org))))
+
+(ert-deftest mw-thesaurus-lookup-needs-an-entry-for-the-word-itself-test ()
+  (let ((result (mw-thesaurus-test--call
+                 (lambda (_)
+                   (mw-thesaurus-test--entries '("à la mode" "à la mode")
+                                               '("A-list" "A-list")))
+                 (lambda () (mw-thesaurus--lookup-word "a")))))
+    (should-not (plist-get result :rendered))
+    (should (equal '("No Merriam-Webster entry for \"a\"")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-lookup-matches-inflections-test ()
+  (let ((result (mw-thesaurus-test--call
+                 (lambda (_)
+                   (mw-thesaurus-test--entries '("weak" "weak" "weaker" "weakest")))
+                 (lambda () (mw-thesaurus--lookup-word "Weakest")))))
+    (should (string-prefix-p "* weak ~verb~" (car (plist-get result :rendered))))
+    (should-not (plist-get result :messages))))
+
+(ert-deftest mw-thesaurus--normalize-test ()
+  (should (equal "happy" (mw-thesaurus--normalize "  Happy!  ")))
+  (should (equal "well known" (mw-thesaurus--normalize "well-known")))
+  (should (equal "under the weather" (mw-thesaurus--normalize "under  the\nweather")))
+  (should (equal "naive" (mw-thesaurus--normalize "naïve")))
+  (should (equal (mw-thesaurus--normalize "can't") (mw-thesaurus--normalize "can’t"))))
 
 (ert-deftest mw-thesaurus-lookup-encodes-words-test ()
   (let ((result (mw-thesaurus-test--lookup-region

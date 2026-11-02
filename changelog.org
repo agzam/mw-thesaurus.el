@@ -3,6 +3,12 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
+* [Unreleased]
+
+** Fixed
+- a word with no entry, such as "both", says so; it showed the entries of phrases with the word, such as "burn" for "burn the candle at both ends"
+- a word's entries no longer include entries that only list a phrase with it: "neither" no longer shows "fish"
+
 * [1.2.0] - 2026-11-01
 
 ** Changed

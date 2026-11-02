@@ -138,6 +138,34 @@
                         (eq 'Mn (get-char-code-property char 'general-category)))
                       (ucs-normalize-NFD-string word))))
 
+(defun mw-thesaurus--normalize (text)
+  "Return TEXT folded and lowercase, words split by one space, no punctuation."
+  (string-trim
+   (replace-regexp-in-string
+    "[[:space:]]+" " "
+    (replace-regexp-in-string
+     "[^[:alnum:][:space:]]" ""
+     (replace-regexp-in-string "-" " " (downcase (mw-thesaurus--fold text)))))))
+
+(defun mw-thesaurus--own-entries (data word)
+  "Return the entries in DATA for WORD or whose headword holds WORD.
+Return nil if none is for WORD itself.  The API also sends entries
+that only list a phrase with WORD, such as \"burn the candle at both
+ends\" for \"both\"."
+  (let* ((key (mw-thesaurus--normalize word))
+         (entries (seq-filter #'consp data))
+         (own-p (lambda (entry)
+                  (seq-some (lambda (stem) (equal key (mw-thesaurus--normalize stem)))
+                            (alist-get 'stems (alist-get 'meta entry))))))
+    (when (seq-some own-p entries)
+      (seq-filter
+       (lambda (entry)
+         (or (funcall own-p entry)
+             (string-match-p
+              (concat "\\(?:\\`\\| \\)" (regexp-quote key) "\\(?: \\|\\'\\)")
+              (mw-thesaurus--normalize (alist-get 'hw (alist-get 'hwi entry))))))
+       entries))))
+
 (defun mw-thesaurus--suggestions (data)
   "Return the spelling suggestions in DATA, a response without entries."
   (seq-filter #'stringp data))
@@ -185,14 +213,14 @@ goes to the echo area and prevents a second fallback."
    (lambda (status)
      (let* ((err (plist-get status :error))
             (data (unless err (mw-thesaurus--read-response)))
-            (dict-str (and (listp data) (mw-thesaurus--parse data)))
+            (entries (and (listp data) (mw-thesaurus--own-entries data word)))
             (suggestion (and (listp data) (car (mw-thesaurus--suggestions data)))))
        (kill-buffer)
        (cond
         (err (message "Merriam-Webster request failed: %S" err))
         ((stringp data) (message "Merriam-Webster: %s" (car (split-string data "\n"))))
-        ((< 0 (length dict-str))
-         (mw-thesaurus--create-buffer dict-str)
+        (entries
+         (mw-thesaurus--create-buffer (mw-thesaurus--parse entries))
          (when missed-word
            (message "No Merriam-Webster entry for \"%s\", showing \"%s\""
                     missed-word word)))
