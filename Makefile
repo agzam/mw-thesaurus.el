@@ -1,7 +1,8 @@
-.PHONY: help deps test lint checkdoc check-compile e2e clean
+.PHONY: help deps test lint checkdoc melpazoid check-compile e2e clean
 
 ELPA := $(CURDIR)/.elpa
 SANDBOX := $(CURDIR)/.sandbox
+MELPAZOID ?= $(HOME)/GitHub/riscy/melpazoid/melpazoid/melpazoid.el
 
 # Every Emacs here runs against a throwaway user-emacs-directory: -Q
 # and --batch skip init files but still write under ~/.emacs.d.  The
@@ -18,10 +19,11 @@ EMACS = $(EMACS_Q) --batch
 
 help:
 	@echo "Available commands:"
-	@echo "  make deps          Install package-lint into .elpa"
+	@echo "  make deps          Install package-lint and pkg-info into .elpa"
 	@echo "  make test          Run the tests"
 	@echo "  make lint          Run package-lint"
 	@echo "  make checkdoc      Run checkdoc"
+	@echo "  make melpazoid     Run the harness a MELPA reviewer runs"
 	@echo "  make check-compile Check for clean byte-compilation"
 	@echo "  make e2e           Type the E2E cases into emacs -nw -q, beside origin/master"
 	@echo "  make clean         Remove compiled files and the sandbox"
@@ -29,7 +31,8 @@ help:
 deps:
 	@echo "Installing dependencies into $(ELPA)"
 	$(EMACS) --eval "(progn (package-initialize) (package-refresh-contents) \
-	  (unless (package-installed-p 'package-lint) (package-install 'package-lint)))"
+	  (dolist (pkg '(package-lint pkg-info)) \
+	    (unless (package-installed-p pkg) (package-install pkg))))"
 
 $(ELPA):
 	@$(MAKE) deps
@@ -50,6 +53,18 @@ checkdoc:
 	  --eval "(setq checkdoc-verb-check-experimental-flag nil)" \
 	  --eval "(checkdoc-file \"mw-thesaurus.el\")" 2>&1); \
 	if [ -n "$$out" ]; then echo "$$out"; exit 1; else echo "checkdoc: clean"; fi
+
+# melpazoid's Docker image has no arm64 build, so load its elisp direct.
+# It finds packages through (locate-user-emacs-file "elpa") and checks
+# every .el beside the file, so stage only what ships to MELPA.
+melpazoid: | $(ELPA)
+	@test -f "$(MELPAZOID)" || { echo "no melpazoid at $(MELPAZOID)"; exit 1; }
+	@mkdir -p "$(SANDBOX)" && ln -sfn "$(ELPA)" "$(SANDBOX)/elpa"
+	@stage=$$(mktemp -d) && cp mw-thesaurus.el $$stage/ && \
+	out=$$(cd $$stage && PACKAGE_MAIN=mw-thesaurus.el $(EMACS) -f package-initialize \
+	  --load="$(MELPAZOID)" 2>&1); \
+	rm -rf $$stage; \
+	if [ -n "$$out" ]; then echo "$$out"; exit 1; else echo "melpazoid: clean"; fi
 
 # the .elc goes at the end: `locate-library' prefers it, so one left
 # behind makes a later `make test' run against a stale artifact
