@@ -339,6 +339,13 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (mw-thesaurus-mode)
     (should (eq #'mw-thesaurus-lookup-at-point (key-binding (kbd "RET"))))))
 
+(ert-deftest mw-thesaurus-mode-evil-keys-test ()
+  (with-temp-buffer
+    (org-mode)
+    (mw-thesaurus-mode)
+    (should (eq #'mw-thesaurus-lookup-at-point (command-remapping 'evil-ret)))
+    (should (eq #'mw-thesaurus--quit (command-remapping 'evil-record-macro)))))
+
 (ert-deftest mw-thesaurus-reload-resets-the-api-url-test ()
   (let ((url mw-thesaurus--api-url))
     (unwind-protect

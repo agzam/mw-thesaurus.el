@@ -46,6 +46,9 @@
 (defvar mw-thesaurus-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map [remap org-open-at-point] #'mw-thesaurus-lookup-at-point)
+    ;; Evil's state maps outrank this map; a remap reaches past them.
+    (define-key map [remap evil-ret] #'mw-thesaurus-lookup-at-point)
+    (define-key map [remap evil-record-macro] #'mw-thesaurus--quit)
     (define-key map (kbd "RET") #'mw-thesaurus-lookup-at-point)
     (define-key map (kbd "q") #'mw-thesaurus--quit)
     map)
