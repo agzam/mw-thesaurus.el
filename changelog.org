@@ -3,7 +3,7 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
-* [Unreleased]
+* [1.2.1] - 2026-11-01
 
 ** Fixed
 - a word with no entry, such as "both", says so; it showed the entries of phrases with the word, such as "burn" for "burn the candle at both ends"
