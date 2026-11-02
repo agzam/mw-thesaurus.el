@@ -207,9 +207,9 @@ Return the body text when it is not JSON, e.g. a key error."
 
 (defun mw-thesaurus--lookup-word (word &optional missed-word)
   "Look up WORD and show its thesaurus entries.
-When WORD has no entry, look up its first spelling suggestion if that is
-one or two edits away.  MISSED-WORD is the word that had no entry; it
-goes to the echo area and prevents a second fallback."
+With no entry, look up the first spelling suggestion if it is one or two
+edits away, at most one per two letters.  MISSED-WORD, the word that had
+no entry, goes to the echo area and prevents a second fallback."
   (url-retrieve
    (concat mw-thesaurus--api-url (url-hexify-string (mw-thesaurus--fold word))
            "?key=" mw-thesaurus-api-key)
@@ -217,7 +217,9 @@ goes to the echo area and prevents a second fallback."
      (let* ((err (plist-get status :error))
             (data (unless err (mw-thesaurus--read-response)))
             (entries (and (listp data) (mw-thesaurus--own-entries data word)))
-            (suggestion (and (listp data) (car (mw-thesaurus--suggestions data)))))
+            (suggestion (and (listp data) (car (mw-thesaurus--suggestions data))))
+            (edits (and suggestion
+                        (string-distance (downcase word) (downcase suggestion)))))
        (kill-buffer)
        (cond
         (err (message "Merriam-Webster request failed: %S" err))
@@ -227,8 +229,8 @@ goes to the echo area and prevents a second fallback."
          (when missed-word
            (message "No Merriam-Webster entry for \"%s\", showing \"%s\""
                     missed-word word)))
-        ((and suggestion (not missed-word)
-              (< 0 (string-distance (downcase word) (downcase suggestion)) 3))
+        ((and suggestion (not missed-word) (< 0 edits 3)
+              (<= (* 2 edits) (length word)))
          (mw-thesaurus--lookup-word suggestion word))
         (t
          (message "No Merriam-Webster entry for \"%s\""

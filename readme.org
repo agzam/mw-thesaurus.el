@@ -51,7 +51,7 @@ It is on [[https://melpa.org/#/mw-thesaurus][MELPA]].
 * Commands
 ~mw-thesaurus-lookup-dwim~ - bind that to any desired hotkey, and it would automatically search for a thesaurus definition using the region (if you have any text selected) or a word at the point, or if there's nothing - it prompts you for a word.
 
-If the word has no entry, e.g. because of a typo, the first spelling suggestion from Merriam-Webster shows instead, but only when it differs by one or two letters: "hapy" shows "happy", while "etymology" shows nothing rather than "homology".
+If the word has no entry, e.g. because of a typo, the first spelling suggestion from Merriam-Webster shows instead, but only when it differs by one or two letters, and in no more than half of the word: "hapy" shows "happy", while "etymology" shows nothing rather than "homology", and "I" nothing rather than "GI".
 * Keys available in mw-thesaurus-mode
 ~RET~ lookup for the word at the cursor (lets you "drill" into definition further)
 

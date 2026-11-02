@@ -9,6 +9,7 @@ Changes to the project, following Keep a Changelog conventions.
 - a word with no entry, such as "both", says so; it showed the entries of phrases with the word, such as "burn" for "burn the candle at both ends"
 - a word's entries no longer include entries that only list a phrase with it: "neither" no longer shows "fish"
 - with evil, ~q~ quits the thesaurus buffer and ~RET~ looks up the word at point; evil's normal state took both keys
+- a spelling suggestion also has to differ in no more than half of the word, so "I" no longer shows "GI"
 
 * [1.2.0] - 2026-11-01
 

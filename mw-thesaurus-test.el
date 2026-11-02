@@ -142,6 +142,18 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (should (equal '("No Merriam-Webster entry for \"weakest\"")
                    (plist-get result :messages)))))
 
+(ert-deftest mw-thesaurus-lookup-ignores-suggestions-for-one-letter-test ()
+  (let ((result (mw-thesaurus-test--lookup-region "I" '("gi") '("gi" "GI" "is"))))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should-not (plist-get result :rendered))
+    (should (equal '("No Merriam-Webster entry for \"I\"")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-lookup-accepts-two-edits-in-four-letters-test ()
+  (let ((result (mw-thesaurus-test--lookup-region "wrod" '("word") '("word" "rod"))))
+    (should (equal 2 (length (plist-get result :urls))))
+    (should (string-prefix-p "* word ~verb~" (car (plist-get result :rendered))))))
+
 (ert-deftest mw-thesaurus-lookup-ignores-the-same-word-test ()
   (let ((result (mw-thesaurus-test--lookup-region
                  "Tenacity" nil '("tenacity" "tenacious"))))

@@ -176,7 +176,8 @@ say what the thesaurus shows passes whatever entries come back."
     (mw-e2e--word-case "phrase giv up" "giv up" :shows "^\\* give up " :only "give up")
     (mw-e2e--word-case "sentence" "the quick brown fox jumps over the lazy dog"
                        :no-thesaurus t)
-    (mw-e2e--word-case "single letter" "a" :no-thesaurus t)
+    (mw-e2e--word-case "single letter a" "a" :no-thesaurus t)
+    (mw-e2e--word-case "single letter I" "I" :no-thesaurus t :lookups 1)
     (mw-e2e--word-case "number" "123" :no-thesaurus t))
    `(("bad key" :text "\n" :point 1 :tags (env)
       :steps ((eval (setq mw-thesaurus-api-key "bad-e2e-key"))
