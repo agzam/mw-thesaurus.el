@@ -142,7 +142,9 @@
                                (nreverse heads)))
                     :senses (count-matches "^\\*\\* " (point-min) (point-max))
                     :mode major-mode
-                    :mw (bound-and-true-p mw-thesaurus-mode)
+                    :org (and (derived-mode-p 'org-mode) t)
+                    :mw (or (bound-and-true-p mw-thesaurus-mode)
+                            (and (derived-mode-p 'mw-thesaurus-mode) t))
                     :read-only buffer-read-only
                     :point (if-let* ((w (get-buffer-window thesaurus)))
                                (window-point w)
