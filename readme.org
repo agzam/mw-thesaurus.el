@@ -1,4 +1,6 @@
 * Merriam-Webster Thesaurus
+  [[https://github.com/agzam/mw-thesaurus.el/actions/workflows/run-tests.yml][https://github.com/agzam/mw-thesaurus.el/actions/workflows/run-tests.yml/badge.svg]]
+
   For more than 150 years, in print and now online, Merriam-Webster has been America's leading and most-trusted provider of language information.
 
   This package allows you to lookup a word and displays its thesaurus definition in a pleasing outline (Org-mode) format

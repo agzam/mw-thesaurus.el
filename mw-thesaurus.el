@@ -14,7 +14,7 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; For more than 150 years, in print and now online, Merriam-Webster has been America's leading and most-trusted provider of language information.
-;; Each month, Merriam-Webster web sites offer guidance to more than 40 million visitors. In print, publications include Merriam-Webster's Collegiate Dictionary (among the best-selling books in American history) and newly published dictionaries for English-language learners.
+;; Each month, Merriam-Webster web sites offer guidance to more than 40 million visitors.  In print, publications include Merriam-Webster's Collegiate Dictionary (among the best-selling books in American history) and newly published dictionaries for English-language learners.
 ;; All Merriam-Webster products and services are backed by the largest team of professional dictionary editors and writers in America, and one of the largest in the world.
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -252,7 +252,7 @@ otherwise as for word using mw-thesaurus-lookup-word"
 
 ;;;###autoload
 (defun mw-thesaurus-lookup (&optional beginning end)
-  "Look up a thesaurus definition for word using Merriam-Webster online dictionary.
+  "Look up a thesaurus definition using Merriam-Webster online dictionary.
 `BEGINNING' and `END' correspond to the selected text with a word to look up.
 If there is no selection provided, additional input will be required."
   (interactive
