@@ -49,11 +49,15 @@ It is on [[https://melpa.org/#/mw-thesaurus][MELPA]].
 
 *** Doom/Evil users may want to remap org specific keys
 
+Doom binds ~RET~ in Org buffers to ~+org/dwim-at-point~ through ~evil-org-mode-map~, and that minor mode's keys outrank the thesaurus buffer's own. Remap the command so ~RET~ looks up the word at point:
+
 #+begin_src emacs-lisp
-(map! :map mw-thesaurus-mode-map
-   [remap evil-record-macro] #'mw-thesaurus--quit
-   [remap org-dwim-at-point] #'mw-thesaurus-lookup-at-point)
+(map! :after mw-thesaurus
+      :map mw-thesaurus-mode-map
+      [remap evil-record-macro] #'mw-thesaurus--quit
+      [remap +org/dwim-at-point] #'mw-thesaurus-lookup-at-point)
 #+end_src
+
 
 * Commands
 ~mw-thesaurus-lookup-dwim~ - bind that to any desired hotkey, and it would automatically search for a thesaurus definition using the region (if you have any text selected) or a word at the point, or if there's nothing - it prompts you for a word.
