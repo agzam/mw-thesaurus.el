@@ -102,6 +102,15 @@ say what the thesaurus shows passes whatever entries come back."
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
               (search "glad") (cmd "mw-thesaurus-lookup-dwim") (wait-done))
       :expect (:shows "^\\* glad " :windows 2))
+     ("back after drilling down" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (search "glad") (keys "Enter") (wait-done 6)
+              (profile-keys ("l") ("H")) (pause 1))
+      :expect (:shows "^\\* happy " :at "glad" :windows 2 :lookups 2))
+     ("back with no earlier lookup" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (profile-keys ("l") ("H")) (pause 1))
+      :expect (:shows "^\\* happy " :error "No earlier lookup" :lookups 1))
      ("q quits" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "q") (pause 1) (keys "C-g") (pause 1))
       :expect (:no-thesaurus t))
@@ -426,6 +435,10 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
       (when-let* ((re (plist-get expect :shows)))
         (unless (and thesaurus (string-match-p re (plist-get thesaurus :head)))
           (fail "expected the thesaurus to show %S" re)))
+      (when-let* ((re (plist-get expect :at)))
+        (unless (and thesaurus
+                     (string-match-p (concat "\\`" re) (plist-get thesaurus :after-point)))
+          (fail "expected point in the thesaurus before %S" re)))
       (when-let* ((re (plist-get expect :only)))
         (dolist (head (plist-get thesaurus :heads))
           (unless (string-match-p re head)
@@ -497,6 +510,9 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
 
 (defun mw-e2e-main ()
   "Run every profile of `mw-e2e--profiles' and exit non-zero on a failure."
+  (unless (seq-some #'mw-e2e--selected-cases mw-e2e--profiles)
+    (error "No case label matches MW_E2E_CASES %S, an Emacs regexp (\\| between labels)"
+           mw-e2e--only))
   (make-directory mw-e2e--dir t)
   (mw-e2e--packages)
   (unwind-protect
