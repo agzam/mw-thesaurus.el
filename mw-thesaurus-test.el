@@ -558,6 +558,18 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
           (should-not popped))
       (kill-buffer mw-thesaurus-buffer-name))))
 
+(ert-deftest mw-thesaurus--request-calls-back-in-the-response-test ()
+  ;; Another buffer's syntax table would decide what the callback's regexps match.
+  (let (response seen)
+    (cl-letf (((symbol-function 'url-retrieve)
+               (lambda (_url callback &rest _)
+                 (with-current-buffer (setq response (generate-new-buffer " *mw-test*"))
+                   (mw-thesaurus-test--insert-response "[\"happy\"]")
+                   (funcall callback nil)))))
+      (mw-thesaurus--request "happy" 'thesaurus (lambda (_) (setq seen (current-buffer)))))
+    (should (eq response seen))
+    (should-not (buffer-live-p response))))
+
 (ert-deftest mw-thesaurus-mode-ret-looks-up-test ()
   (with-temp-buffer
     (mw-thesaurus-mode)

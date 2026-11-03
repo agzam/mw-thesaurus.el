@@ -749,18 +749,23 @@ to the echo area instead."
      (concat (if dictionary mw-thesaurus--dictionary-api-url mw-thesaurus--api-url)
              (url-hexify-string (mw-thesaurus--fold word)) "?key=" key)
      (lambda (status)
-       (let* ((err (plist-get status :error))
+       (let* ((response (current-buffer))
+              (err (plist-get status :error))
               (data (unless err (mw-thesaurus--read-response))))
-         (kill-buffer)
-         (cond
-          (err (message "%s request failed: %S" (mw-thesaurus--source reference) err))
-          ((stringp data)
-           (let ((reply (car (split-string data "\n"))))
-             (message "%s: %s%s" (mw-thesaurus--source reference) reply
-                      (if (string-prefix-p "Invalid API key" reply)
-                          (concat "  " (mw-thesaurus--key-help reference))
-                        ""))))
-          (t (funcall callback data)))))
+         ;; CALLBACK runs in the response buffer: in a buffer of the
+         ;; user's, such as *scratch*, [[:space:]] misses a newline.
+         (unwind-protect
+             (cond
+              (err (message "%s request failed: %S"
+                            (mw-thesaurus--source reference) err))
+              ((stringp data)
+               (let ((reply (car (split-string data "\n"))))
+                 (message "%s: %s%s" (mw-thesaurus--source reference) reply
+                          (if (string-prefix-p "Invalid API key" reply)
+                              (concat "  " (mw-thesaurus--key-help reference))
+                            ""))))
+              (t (funcall callback data)))
+           (kill-buffer response))))
      nil t t)))
 
 (defun mw-thesaurus--lookup-word (word &optional reference missed-word)
