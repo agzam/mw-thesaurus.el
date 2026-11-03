@@ -118,6 +118,8 @@
   (advice-remove 'url-retrieve 'mw-e2e-slow)
   (remove-hook 'org-mode-hook #'org-indent-mode)
   (delete-directory (mw-e2e--audio-dir) t)
+  (when (boundp 'mw-thesaurus--entry-recordings)
+    (clrhash mw-thesaurus--entry-recordings))
   (when-let* ((buffer (get-buffer mw-thesaurus-buffer-name)))
     (kill-buffer buffer))
   (delete-other-windows)
@@ -235,6 +237,13 @@
                                                      (apply callback status)))))))
                           (nthcdr 2 args))))
               '((name . mw-e2e-slow))))
+
+(defun mw-e2e-goto-speaker (n)
+  "Put point on the Nth speaker of the thesaurus page, in its window."
+  (with-selected-window (get-buffer-window mw-thesaurus-buffer-name)
+    (goto-char (point-min))
+    (re-search-forward "\\]\\[🔊\\]\\]" nil nil n)
+    (goto-char (+ 2 (match-beginning 0)))))
 
 (defun mw-e2e--header-line ()
   "Return the header line of the thesaurus buffer as its window shows it."

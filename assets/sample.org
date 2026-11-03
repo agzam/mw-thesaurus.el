@@ -1,4 +1,4 @@
-* decline ~verb~
+* decline ~verb~ [[mw-thesaurus-entry-audio:ee2c507f-4c87-42f1-828f-140e7adc6c39:decline][🔊]]
 ** to show unwillingness to accept, do, engage in, or agree to
    - he ​/declined/​ the invitation to the party
    - she ​/declined/​ to participate in the soccer game
@@ -100,7 +100,7 @@
     even, flatten, level, plane, smooth, straighten
 *** Antonyms:
     arise, ascend, climb, mount, rise, uprise, upsweep, upturn
-* decline ~noun~
+* decline ~noun~ [[mw-thesaurus-entry-audio:969089ae-abdd-4188-bf52-a7ba496b871c:decline][🔊]]
 ** a gradual sinking and wasting away of mind or body
    - her sad ​/decline/​ from a robust athlete to an old woman with arthritis
 *** Synonyms:

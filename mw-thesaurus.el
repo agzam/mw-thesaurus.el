@@ -210,13 +210,20 @@ ffplay and mpg123 that `executable-find' finds."
       mw-thesaurus--word-lists ""))))
 
 (defun mw-thesaurus--parse (data)
-  "Format the entries in DATA, a parsed API response, as Org text."
+  "Format the entries in DATA, a parsed API response, as Org text.
+An entry the Collegiate Dictionary also has gets a link that plays the
+dictionary's recording of it."
   (mapconcat
    (lambda (entry)
-     (concat "* " (alist-get 'hw (alist-get 'hwi entry))
-             " ~" (alist-get 'fl entry) "~\n"
-             (mapconcat #'mw-thesaurus--format-sense
-                        (mw-thesaurus--senses entry) "")))
+     (let ((headword (alist-get 'hw (alist-get 'hwi entry)))
+           (target (alist-get 'target (alist-get 'meta entry))))
+       (concat "* " headword " ~" (alist-get 'fl entry) "~"
+               (when (equal "collegiate" (alist-get 'tsrc target))
+                 (format " [[mw-thesaurus-entry-audio:%s:%s][🔊]]"
+                         (alist-get 'tuuid target) headword))
+               "\n"
+               (mapconcat #'mw-thesaurus--format-sense
+                          (mw-thesaurus--senses entry) ""))))
    (seq-remove #'stringp data) ""))
 
 (defconst mw-thesaurus--cross-reference-regexp
@@ -453,19 +460,19 @@ A pronunciation with a recording is a link that plays it."
           audio))
 
 (defun mw-thesaurus--audio-player ()
-  "Return the command that plays a recording, or nil if there is none."
+  "Return the command that plays a recording; signal an error if there is none."
   (or mw-thesaurus-audio-player
       (seq-find (lambda (command) (executable-find (car command)))
                 '(("afplay")
                   ("mpv" "--no-video" "--really-quiet")
                   ("ffplay" "-nodisp" "-autoexit" "-loglevel" "quiet")
-                  ("mpg123" "-q")))))
+                  ("mpg123" "-q")))
+      (user-error "No audio player found; set `mw-thesaurus-audio-player'")))
 
 (defun mw-thesaurus--play (audio &optional _)
   "Play the Merriam-Webster recording named AUDIO.
 The first play downloads it under the variable `temporary-file-directory'."
-  (let ((player (or (mw-thesaurus--audio-player)
-                    (user-error "No audio player found; set `mw-thesaurus-audio-player'")))
+  (let ((player (mw-thesaurus--audio-player))
         (file (expand-file-name (concat "mw-thesaurus/" audio ".mp3")
                                 temporary-file-directory)))
     (if (file-exists-p file)
@@ -487,6 +494,37 @@ The first play downloads it under the variable `temporary-file-directory'."
 
 (org-link-set-parameters "mw-thesaurus-audio" :follow #'mw-thesaurus--play)
 
+(defvar mw-thesaurus--entry-recordings (make-hash-table :test #'equal)
+  "The recording of each Collegiate Dictionary entry asked about, by uuid.
+`none' stands for an entry without one.")
+
+(defun mw-thesaurus--entry-recording (data uuid)
+  "Return the first recording of the entry UUID in DATA, a dictionary answer."
+  (when-let* ((entry (seq-find (lambda (entry)
+                                 (equal uuid (alist-get 'uuid (alist-get 'meta entry))))
+                               (seq-filter #'consp data))))
+    (seq-some (lambda (pronunciation) (alist-get 'audio (alist-get 'sound pronunciation)))
+              (alist-get 'prs (alist-get 'hwi entry)))))
+
+(defun mw-thesaurus--entry-audio (path &optional _)
+  "Play the recording of the Collegiate Dictionary entry PATH names.
+PATH is UUID:WORD.  The first play asks the dictionary about WORD."
+  (mw-thesaurus--audio-player)
+  (let ((uuid (substring path 0 (string-match ":" path)))
+        (word (substring path (match-end 0))))
+    (pcase (gethash uuid mw-thesaurus--entry-recordings)
+      ('nil
+       (mw-thesaurus--request
+        word 'dictionary
+        (lambda (data)
+          (puthash uuid (or (mw-thesaurus--entry-recording data uuid) 'none)
+                   mw-thesaurus--entry-recordings)
+          (mw-thesaurus--entry-audio path))))
+      ('none (message "No Merriam-Webster recording of \"%s\"" word))
+      (audio (mw-thesaurus--play audio)))))
+
+(org-link-set-parameters "mw-thesaurus-entry-audio" :follow #'mw-thesaurus--entry-audio)
+
 (defun mw-thesaurus--svg-color (color &optional toward weight)
   "Return COLOR as SVG's #RRGGBB, or mixed with WEIGHT, 0 to 1, of TOWARD.
 Emacs color names and #RRRRGGGGBBBB strings mean nothing to SVG."
@@ -498,8 +536,9 @@ Emacs color names and #RRRRGGGGBBBB strings mean nothing to SVG."
 
 (defun mw-thesaurus--audio-svg (text)
   "Return an SVG button with TEXT and a speaker, sized to the default font.
-The button is 4 pixels taller than a line.  Its text sits where Emacs
-puts the line's baseline in an image with `:ascent' `center'."
+Empty TEXT leaves the speaker alone.  The button is 4 pixels taller than
+a line, and its text sits where Emacs puts the line's baseline in an
+image with `:ascent' `center'."
   (let* ((font (font-info (face-font 'default)))
          (char (default-font-width))
          (height (+ (aref font 3) 4))
@@ -508,8 +547,9 @@ puts the line's baseline in an image with `:ascent' `center'."
          (background (face-background 'default nil t))
          (ink (mw-thesaurus--svg-color color))
          (icon (* 0.6 (aref font 3)))
-         (pad (* 0.5 height))
-         (icon-x (+ pad (* char (string-width text)) (* 0.6 char)))
+         (bare (string-empty-p text))
+         (pad (* (if bare 0.4 0.5) height))
+         (icon-x (+ pad (if bare 0 (* char (+ (string-width text) 0.6)))))
          (width (round (+ icon-x icon (* 0.4 height))))
          (middle (/ height 2.0))
          (svg (svg-create width height)))
@@ -517,9 +557,10 @@ puts the line's baseline in an image with `:ascent' `center'."
                    :rx middle
                    :stroke (mw-thesaurus--svg-color background color 0.5)
                    :fill (mw-thesaurus--svg-color background color 0.12))
-    (svg-text svg text :x pad :y baseline :fill ink
-              :font-family (face-attribute 'default :family nil 'default)
-              :font-size (aref font 2))
+    (unless bare
+      (svg-text svg text :x pad :y baseline :fill ink
+                :font-family (face-attribute 'default :family nil 'default)
+                :font-size (aref font 2)))
     (svg-polygon svg (mapcar (lambda (point)
                                (cons (+ icon-x (* icon (car point)))
                                      (+ middle (* icon (cdr point)))))
@@ -541,19 +582,22 @@ puts the line's baseline in an image with `:ascent' `center'."
 
 (defun mw-thesaurus--audio-buttons ()
   "Draw each pronunciation link of the page as a button with a speaker.
-A terminal, or an Emacs without SVG, shows the links as they are."
+A link to a dictionary entry gets the speaker alone.  A terminal, or an
+Emacs without SVG, shows the links as they are."
   (when (and (display-graphic-p) (image-type-available-p 'svg))
     (save-excursion
       (goto-char (point-min))
-      (while (re-search-forward "\\[\\[mw-thesaurus-audio:\\([^]]+\\)\\]\\[\\([^]]+\\)\\]\\]"
-                                nil t)
-        (let ((audio (match-string-no-properties 1)))
+      (while (re-search-forward
+              "\\[\\[\\(mw-thesaurus-\\(entry-\\)?audio:[^]]+\\)\\]\\[\\([^]]+\\)\\]\\]" nil t)
+        (let ((link (concat "[[" (match-string-no-properties 1) "]]")))
           (make-button (match-beginning 0) (match-end 0)
                        'display (svg-image (mw-thesaurus--audio-svg
-                                            (match-string-no-properties 2))
+                                            (if (match-beginning 2)
+                                                ""
+                                              (match-string-no-properties 3)))
                                            ;; The SVG is drawn to the font's pixels.
                                            :scale 1 :ascent 'center)
-                       'action (lambda (_) (mw-thesaurus--play audio))
+                       'action (lambda (_) (org-link-open-from-string link))
                        ;; Emacs would underline the image as it does the link.
                        'face '(:underline nil)
                        'follow-link t
@@ -687,15 +731,16 @@ Point returns to where it was, and no request goes to Merriam-Webster."
             'mw-thesaurus-api-key)
           (capitalize (symbol-name reference))))
 
-(defun mw-thesaurus--lookup-word (word &optional reference missed-word)
-  "Look up WORD in REFERENCE, the thesaurus by default, and show its entries.
-With no entry, look up the first spelling suggestion if it is one or two
-edits away, at most one per two letters.  MISSED-WORD, the word that had
-no entry, goes to the echo area and prevents a second fallback."
-  (let* ((reference (or reference 'thesaurus))
-         (dictionary (eq reference 'dictionary))
-         (key (if dictionary mw-thesaurus-dictionary-api-key mw-thesaurus-api-key))
-         (source (if dictionary "Merriam-Webster dictionary" "Merriam-Webster")))
+(defun mw-thesaurus--source (reference)
+  "Return how the echo area names REFERENCE."
+  (if (eq reference 'dictionary) "Merriam-Webster dictionary" "Merriam-Webster"))
+
+(defun mw-thesaurus--request (word reference callback)
+  "Ask REFERENCE about WORD, then call CALLBACK with the parsed answer.
+A failed request, or a reply that is not JSON such as a key error, goes
+to the echo area instead."
+  (let* ((dictionary (eq reference 'dictionary))
+         (key (if dictionary mw-thesaurus-dictionary-api-key mw-thesaurus-api-key)))
     (when (string-empty-p (or key ""))
       (user-error "%s" (mw-thesaurus--key-help reference)))
     (url-retrieve
@@ -703,33 +748,49 @@ no entry, goes to the echo area and prevents a second fallback."
              (url-hexify-string (mw-thesaurus--fold word)) "?key=" key)
      (lambda (status)
        (let* ((err (plist-get status :error))
-              (data (unless err (mw-thesaurus--read-response)))
-              (entries (and (listp data) (mw-thesaurus--own-entries data word)))
-              (suggestion (and (listp data) (car (mw-thesaurus--suggestions data))))
-              (edits (and suggestion
-                          (string-distance (downcase word) (downcase suggestion)))))
+              (data (unless err (mw-thesaurus--read-response))))
          (kill-buffer)
          (cond
-          (err (message "%s request failed: %S" source err))
+          (err (message "%s request failed: %S" (mw-thesaurus--source reference) err))
           ((stringp data)
            (let ((reply (car (split-string data "\n"))))
-             (message "%s: %s%s" source reply
+             (message "%s: %s%s" (mw-thesaurus--source reference) reply
                       (if (string-prefix-p "Invalid API key" reply)
                           (concat "  " (mw-thesaurus--key-help reference))
                         ""))))
+          (t (funcall callback data)))))
+     nil t t)))
+
+(defun mw-thesaurus--lookup-word (word &optional reference missed-word)
+  "Look up WORD in REFERENCE, the thesaurus by default, and show its entries.
+With no entry, look up the first spelling suggestion if it is one or two
+edits away, at most one per two letters.  MISSED-WORD, the word that had
+no entry, goes to the echo area and prevents a second fallback."
+  (let ((reference (or reference 'thesaurus)))
+    (mw-thesaurus--request
+     word reference
+     (lambda (data)
+       (let* ((entries (mw-thesaurus--own-entries data word))
+              (suggestion (car (mw-thesaurus--suggestions data)))
+              (edits (and suggestion
+                          (string-distance (downcase word) (downcase suggestion)))))
+         (cond
           (entries
            (mw-thesaurus--create-buffer
             word
-            (if dictionary (mw-thesaurus--dictionary-parse entries) (mw-thesaurus--parse entries))
+            (if (eq reference 'dictionary)
+                (mw-thesaurus--dictionary-parse entries)
+              (mw-thesaurus--parse entries))
             reference)
            (when missed-word
-             (message "No %s entry for \"%s\", showing \"%s\"" source missed-word word)))
+             (message "No %s entry for \"%s\", showing \"%s\""
+                      (mw-thesaurus--source reference) missed-word word)))
           ((and suggestion (not missed-word) (< 0 edits 3)
                 (<= (* 2 edits) (length word)))
            (mw-thesaurus--lookup-word suggestion reference word))
           (t
-           (message "No %s entry for \"%s\"" source (or missed-word word))))))
-     nil t t)))
+           (message "No %s entry for \"%s\""
+                    (mw-thesaurus--source reference) (or missed-word word)))))))))
 
 (defun mw-thesaurus-switch-reference ()
   "Look up the word of the page in the other reference, thesaurus or dictionary."

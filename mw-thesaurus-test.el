@@ -861,34 +861,52 @@ A batch Emacs gives the nearest of its few terminal colors."
     (should (equal "#ffffff" (mw-thesaurus--svg-color "white")))
     (should (equal "#616d7d" (mw-thesaurus--svg-color "#33cd39d34713" "#8fa1b3" 0.5)))))
 
-(ert-deftest mw-thesaurus--audio-svg-test ()
+(defun mw-thesaurus-test--svg (text)
+  "Return the button for TEXT drawn for an 18-pixel font and a dark theme.
+The font has a 23-pixel line, ascent 17 and descent 6."
   (cl-letf (((symbol-function 'color-values) #'mw-thesaurus-test--gui-color-values)
             ((symbol-function 'face-font) (lambda (&rest _) "Fira Code-18"))
-            ;; An 18-pixel font: a 23-pixel line, ascent 17, descent 6.
             ((symbol-function 'font-info)
              (lambda (&rest _) ["Fira Code-18" "Fira Code" 18 23 0 0 0 11 17 6 11 11 nil nil]))
             ((symbol-function 'default-font-width) (lambda () 11))
             ((symbol-function 'face-foreground) (lambda (&rest _) "#8fa1b3"))
             ((symbol-function 'face-background) (lambda (&rest _) "#33cd39d34713")))
-    (let* ((svg (mw-thesaurus--audio-svg "di-ˈklīn"))
-           (rect (car (dom-by-tag svg 'rect)))
-           (text (car (dom-by-tag svg 'text)))
-           (speaker (mapcar (lambda (point) (string-to-number point))
-                            (split-string (dom-attr (car (dom-by-tag svg 'polygon)) 'points)
-                                          "[ ,]+" t))))
-      (should (equal 27 (dom-attr svg 'height)))
-      (should (equal 133 (dom-attr svg 'width)))
-      (should (equal 13.5 (dom-attr rect 'rx)))
-      (should (equal "#3f4654" (dom-attr rect 'fill)))
-      (should (equal "#616d7d" (dom-attr rect 'stroke)))
-      (should (string-prefix-p "di-" (dom-text text)))
-      (should (equal "#8fa1b3" (dom-attr text 'fill)))
-      (should (equal 13.5 (dom-attr text 'x)))
-      ;; Emacs puts the baseline 19 pixels down a 27-pixel image it centers.
-      (should (equal 19 (dom-attr text 'y)))
-      ;; The speaker and its two waves come after 8 columns of text.
-      (should (< (+ 13.5 (* 8 11)) (seq-min (mapcar #'car (seq-partition speaker 2)))))
-      (should (equal 2 (length (dom-by-tag svg 'path)))))))
+    (mw-thesaurus--audio-svg text)))
+
+(defun mw-thesaurus-test--speaker-left (svg)
+  "Return the left edge of the speaker in SVG."
+  (seq-min (seq-map-indexed (lambda (number index) (if (cl-evenp index) number 1000))
+                            (mapcar #'string-to-number
+                                    (split-string (dom-attr (car (dom-by-tag svg 'polygon))
+                                                            'points)
+                                                  "[ ,]+" t)))))
+
+(ert-deftest mw-thesaurus--audio-svg-test ()
+  (let* ((svg (mw-thesaurus-test--svg "di-ˈklīn"))
+         (rect (car (dom-by-tag svg 'rect)))
+         (text (car (dom-by-tag svg 'text))))
+    (should (equal 27 (dom-attr svg 'height)))
+    (should (equal 133 (dom-attr svg 'width)))
+    (should (equal 13.5 (dom-attr rect 'rx)))
+    (should (equal "#3f4654" (dom-attr rect 'fill)))
+    (should (equal "#616d7d" (dom-attr rect 'stroke)))
+    (should (string-prefix-p "di-" (dom-text text)))
+    (should (equal "#8fa1b3" (dom-attr text 'fill)))
+    (should (equal 13.5 (dom-attr text 'x)))
+    ;; Emacs puts the baseline 19 pixels down a 27-pixel image it centers.
+    (should (equal 19 (dom-attr text 'y)))
+    ;; The speaker and its two waves come after 8 columns of text.
+    (should (< (+ 13.5 (* 8 11)) (mw-thesaurus-test--speaker-left svg)))
+    (should (equal 2 (length (dom-by-tag svg 'path))))))
+
+(ert-deftest mw-thesaurus--audio-svg-bare-speaker-test ()
+  (let ((svg (mw-thesaurus-test--svg "")))
+    (should-not (dom-by-tag svg 'text))
+    (should (equal 27 (dom-attr svg 'height)))
+    (should (equal 35 (dom-attr svg 'width)))
+    ;; As far from the left edge as the waves end from the right one.
+    (should (< 10.7 (mw-thesaurus-test--speaker-left svg) 10.9))
+    (should (equal 2 (length (dom-by-tag svg 'path))))))
 
 (ert-deftest mw-thesaurus--show-draws-pronunciation-buttons-test ()
   (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
@@ -930,6 +948,102 @@ A batch Emacs gives the nearest of its few terminal colors."
               (should-not (seq-some (lambda (overlay) (overlay-get overlay 'button))
                                     (overlays-in (point-min) (point-max)))))))
       (kill-buffer mw-thesaurus-buffer-name))))
+
+(defconst mw-thesaurus-test--decline-verb "ee2c507f-4c87-42f1-828f-140e7adc6c39"
+  "The uuid of the Collegiate Dictionary entry for the verb decline.")
+
+(ert-deftest mw-thesaurus--show-draws-speakers-on-a-thesaurus-page-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+        pressed)
+    (unwind-protect
+        (cl-letf (((symbol-function 'display-graphic-p) (lambda (&rest _) t))
+                  ((symbol-function 'image-type-available-p) (lambda (&rest _) t))
+                  ((symbol-function 'mw-thesaurus--audio-svg) (lambda (text) (list 'svg nil text)))
+                  ((symbol-function 'svg-image)
+                   (lambda (svg &rest props) (append (list 'image :svg svg) props)))
+                  ((symbol-function 'mw-thesaurus--entry-audio)
+                   (lambda (path &rest _) (push path pressed))))
+          (mw-thesaurus-test--pages (list "decline" (mw-thesaurus-test--asset "sample.org")))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should (equal 2 (seq-count (lambda (overlay) (overlay-get overlay 'button))
+                                        (overlays-in (point-min) (point-max)))))
+            (goto-char (point-min))
+            (search-forward "[[mw-thesaurus-entry-audio:")
+            (let ((button (button-at (match-beginning 0))))
+              ;; The speaker alone: the thesaurus has no pronunciation to show.
+              (should (equal '(image :svg (svg nil "") :scale 1 :ascent center)
+                             (button-get button 'display)))
+              (button-activate button))
+            (should (equal (list (concat mw-thesaurus-test--decline-verb ":decline")) pressed))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(defun mw-thesaurus-test--entry-audio (paths respond)
+  "Follow the entry links PATHS, in order, against a fake API answering RESPOND.
+Return what `mw-thesaurus-test--call' returns, plus the recordings played."
+  (let ((mw-thesaurus--entry-recordings (make-hash-table :test #'equal))
+        (mw-thesaurus-audio-player '("true"))
+        played)
+    (cl-letf (((symbol-function 'mw-thesaurus--play)
+               (lambda (audio &rest _) (push audio played))))
+      (append (mw-thesaurus-test--call
+               respond (lambda () (mapc #'mw-thesaurus--entry-audio paths)))
+              (list :played (nreverse played))))))
+
+(ert-deftest mw-thesaurus--entry-audio-asks-the-dictionary-once-test ()
+  (let ((result (mw-thesaurus-test--entry-audio
+                 (make-list 2 (concat mw-thesaurus-test--decline-verb ":decline"))
+                 (lambda (_) (mw-thesaurus-test--asset "dictionary-decline.json")))))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should (string-match-p "/collegiate/json/decline\\?key=" (car (plist-get result :urls))))
+    (should (equal '("declin03" "declin03") (plist-get result :played)))
+    (should-not (plist-get result :messages))))
+
+(ert-deftest mw-thesaurus--entry-audio-without-a-recording-test ()
+  ;; The phrase "in decline" has no pronunciation; the zero uuid is no entry.
+  (let ((result (mw-thesaurus-test--entry-audio
+                 '("de9b6681-0be1-46c1-87f7-fd52dc07ce25:in decline"
+                   "de9b6681-0be1-46c1-87f7-fd52dc07ce25:in decline"
+                   "00000000-0000-0000-0000-000000000000:decline")
+                 (lambda (_) (mw-thesaurus-test--asset "dictionary-decline.json")))))
+    (should (equal 2 (length (plist-get result :urls))))
+    (should (string-match-p "/collegiate/json/in%20decline\\?" (car (plist-get result :urls))))
+    (should-not (plist-get result :played))
+    (should (equal '("No Merriam-Webster recording of \"in decline\""
+                     "No Merriam-Webster recording of \"in decline\""
+                     "No Merriam-Webster recording of \"decline\"")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus--entry-audio-after-a-failed-request-test ()
+  (let ((result (mw-thesaurus-test--entry-audio
+                 (make-list 2 (concat mw-thesaurus-test--decline-verb ":decline"))
+                 (lambda (_) '(error connection-failed "refused")))))
+    ;; A failure is not remembered: the next press asks again.
+    (should (equal 2 (length (plist-get result :urls))))
+    (should-not (plist-get result :played))
+    (should (string-match-p "\\`Merriam-Webster dictionary request failed"
+                            (car (plist-get result :messages))))))
+
+(ert-deftest mw-thesaurus--entry-audio-needs-a-player-and-a-key-test ()
+  (let ((mw-thesaurus--entry-recordings (make-hash-table :test #'equal))
+        (path (concat mw-thesaurus-test--decline-verb ":decline")))
+    (cl-letf (((symbol-function 'url-retrieve) (lambda (&rest _) (error "No request expected"))))
+      (let ((mw-thesaurus-audio-player nil))
+        (cl-letf (((symbol-function 'executable-find) #'ignore))
+          (should-error (mw-thesaurus--entry-audio path) :type 'user-error)))
+      (let ((mw-thesaurus-audio-player '("true"))
+            (mw-thesaurus-dictionary-api-key nil))
+        (should-error (mw-thesaurus--entry-audio path) :type 'user-error)))))
+
+(ert-deftest mw-thesaurus--parse-links-entries-of-the-dictionary-only-test ()
+  (let ((org (mw-thesaurus--parse
+              (mw-thesaurus-test--read
+               (concat "[{\"meta\":{\"id\":\"a\",\"target\":{\"tuuid\":\"u1\",\"tsrc\":\"collegiate\"}},"
+                       "\"hwi\":{\"hw\":\"run along\"},\"fl\":\"verb\"},"
+                       "{\"meta\":{\"id\":\"b\",\"target\":{\"tuuid\":\"u2\",\"tsrc\":\"learners\"}},"
+                       "\"hwi\":{\"hw\":\"run\"},\"fl\":\"noun\"}]")))))
+    (should (equal (concat "* run along ~verb~ [[mw-thesaurus-entry-audio:u1:run along][🔊]]\n"
+                           "* run ~noun~\n")
+                   org))))
 
 (ert-deftest mw-thesaurus--show-leaves-indentation-to-org-indent-mode-test ()
   (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")

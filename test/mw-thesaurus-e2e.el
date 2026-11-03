@@ -198,6 +198,18 @@ A case that expects a page expects a dictionary page.  See
               (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)
               (search "ha-p") (keys "Enter") (wait-for (mw-e2e--texts 'play)))
       :expect (:shows "^\\* happy " :reference dictionary :lookups 1 :played "happy001"))
+     ("thesaurus speaker plays" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((eval (setq mw-thesaurus-audio-player '("true")))
+              (cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (eval (mw-e2e-goto-speaker 1)) (keys "Enter") (wait-for (mw-e2e--texts 'play)))
+      :expect (:shows "^\\* happy " :reference thesaurus :lookups 1 :played "happy001"
+               :lines ("^\\* happy ~adjective~ \\[\\[mw-thesaurus-entry-audio:[-0-9a-f]+:happy\\]\\[🔊\\]\\]$")))
+     ("thesaurus speaker without a recording" :text "\n" :point 1 :tags (flow)
+      :steps ((eval (setq mw-thesaurus-audio-player '("true")))
+              (cmd "mw-thesaurus-lookup") (wait-prompt) (type "run") (keys "Enter") (wait-done)
+              (eval (mw-e2e-goto-speaker 2)) (keys "Enter") (wait-for (mw-e2e--texts 'outcome)))
+      :expect (:shows "^\\* run " :reference thesaurus :lookups 1
+               :echo "No Merriam-Webster recording of \"run\""))
      ("RET plays without a player" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((eval (setq mw-thesaurus-audio-player nil exec-path nil))
               (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)
