@@ -3,7 +3,7 @@
 
 For more than 150 years, in print and now online, Merriam-Webster has been America's leading and most-trusted provider of language information.
 
-This package allows you to lookup a word and displays its thesaurus definition in a pleasing outline (Org-mode) format
+This package allows you to lookup a word and displays its thesaurus definition in a pleasing outline (Org-mode) format. It looks words up in the Collegiate Dictionary too.
 
 [[file:assets/thesaurus.gif]]
 
@@ -28,12 +28,15 @@ People have been actively using the package for many years, and the key still wo
   (setq mw-thesaurus-api-key "YOUR-API-KEY")
   #+end_src
 
+The dictionary uses a second shared key, for the Collegiate Dictionary; a free account can hold keys for two references. To use your own, set ~mw-thesaurus-dictionary-api-key~ the same way.
+
 It is on [[https://melpa.org/#/mw-thesaurus][MELPA]].
 
 *** use-package example
 #+begin_src emacs-lisp
 (use-package mw-thesaurus
-  :bind ("C-c t" . mw-thesaurus-lookup-dwim)
+  :bind (("C-c t" . mw-thesaurus-lookup-dwim)
+         ("C-c d" . mw-thesaurus-dictionary-lookup-dwim))
   :hook (mw-thesaurus-mode . variable-pitch-mode)
   :config
   ;; window on the right side
@@ -53,7 +56,7 @@ Doom binds ~RET~ in Org buffers to ~+org/dwim-at-point~ through ~evil-org-mode-m
 
 #+begin_src emacs-lisp
 (map! :after mw-thesaurus
-      :map mw-thesaurus-mode-map
+      :map mw-thesaurus-read-only-map
       [remap evil-record-macro] #'mw-thesaurus--quit
       [remap +org/dwim-at-point] #'mw-thesaurus-lookup-at-point)
 #+end_src
@@ -62,10 +65,28 @@ Doom binds ~RET~ in Org buffers to ~+org/dwim-at-point~ through ~evil-org-mode-m
 * Commands
 ~mw-thesaurus-lookup-dwim~ - bind that to any desired hotkey, and it would automatically search for a thesaurus definition using the region (if you have any text selected) or a word at the point, or if there's nothing - it prompts you for a word.
 
+~mw-thesaurus-dictionary-lookup-dwim~ - the same for the Collegiate Dictionary: pronunciation, inflections, numbered senses with examples, and the word's history. Dictionary pages show in the same buffer.
+
 If the word has no entry, e.g. because of a typo, the first spelling suggestion from Merriam-Webster shows instead, but only when it differs by one or two letters, and in no more than half of the word: "hapy" shows "happy", while "etymology" shows nothing rather than "homology", and "I" nothing rather than "GI".
 * Keys available in mw-thesaurus-mode
-~RET~ lookup for the word at the cursor (lets you "drill" into definition further)
+The header line names both references, Thesaurus and Dictionary, and marks the one shown; a click on the other one switches.
+
+~RET~ lookup for the word at the cursor (lets you "drill" into definition further), in the reference shown
+
+~o~ show the word in the other reference, thesaurus or dictionary
 
 ~l~ (~H~ with evil) go back to the previous lookup, without a new request
 
 ~q~ kill mw-thesaurus buffer and close the window
+
+These keys act while the page is read-only, as it is after every lookup. ~C-x C-q~ makes the page writable: then it types them, and evil's keys work as in any buffer. Bind your own single keys in ~mw-thesaurus-read-only-map~; a key bound in ~mw-thesaurus-mode-map~ acts on writable pages too.
+
+~C-c C-o~ open the page on merriam-webster.com
+
+* Related packages
+
+- [[https://github.com/agzam/wiktionary-bro.el][wiktionary-bro.el]] :: etymology lookup
+- [[https://melpa.org/#/define-it][define-it]] :: definition lookup
+- [[https://melpa.org/#/define-word][define-word]] :: definition lookup - grabs it from wordnik.com
+- [[https://github.com/jamescherti/quick-sdcv.el][quick-sdcv]] :: modern fork of much older [[https://melpa.org/#/sdcv][sdcv.el]] - interface to Stardict CLI. Lifesaver for when you suddenly have no internet.
+ 

@@ -1,0 +1,232 @@
+# Words for `make sweep', one a line, by what they exercise.
+
+# common words
+happy
+sad
+good
+bad
+big
+small
+fast
+quick
+beautiful
+smart
+angry
+calm
+brave
+strong
+weak
+old
+new
+easy
+hard
+important
+
+# huge entries
+set
+run
+go
+take
+make
+get
+put
+turn
+cut
+line
+point
+break
+hold
+play
+draw
+pass
+strike
+charge
+light
+round
+
+# homographs and parts of speech
+bass
+lead
+tear
+wind
+bow
+close
+minute
+object
+present
+record
+content
+desert
+refuse
+project
+subject
+fair
+bear
+bank
+bat
+row
+
+# inflected forms
+went
+gone
+ran
+mice
+children
+better
+best
+worse
+geese
+oxen
+data
+criteria
+analyses
+cacti
+women
+feet
+teeth
+was
+been
+saw
+
+# phrases
+give up
+look forward to
+under the weather
+break the law
+piece of cake
+by and large
+all of a sudden
+in spite of
+on the other hand
+kick the bucket
+spill the beans
+cut corners
+call off
+put up with
+run out
+take off
+at large
+drain away
+make up
+come across
+
+# proper nouns, abbreviations and symbols
+Paris
+London
+Shakespeare
+Einstein
+Christmas
+Monday
+January
+English
+Texas
+Mars
+etc.
+e.g.
+NASA
+FBI
+DNA
+Dr.
+a.m.
+ASAP
+OK
+&
+
+# non-ASCII, hyphens and apostrophes
+café
+naïve
+résumé
+façade
+fiancé
+déjà vu
+piñata
+jalapeño
+über
+smorgasbord
+well-known
+mother-in-law
+self-esteem
+x-ray
+T-shirt
+e-mail
+don't
+can't
+o'clock
+y'all
+
+# usage labels and notes
+ain't
+irregardless
+literally
+hopefully
+lorry
+gotten
+whom
+thee
+betwixt
+forsooth
+
+# variants, prefixes, suffixes
+color
+colour
+theater
+gray
+judgment
+catalog
+un-
+-ness
+pre-
+-ology
+
+# technical and new words
+algorithm
+photosynthesis
+mitochondria
+quantum
+entropy
+recursion
+selfie
+emoji
+podcast
+binge-watch
+
+# long words
+antidisestablishmentarianism
+pneumonoultramicroscopicsilicovolcanoconiosis
+floccinaucinihilipilification
+supercalifragilisticexpialidocious
+incomprehensibilities
+
+# short words
+a
+I
+an
+the
+of
+to
+in
+is
+by
+or
+
+# misses and typos
+hapy
+recieve
+definately
+seperate
+accomodate
+occurence
+wierd
+untill
+beleive
+tommorow
+xqzvbnwpt
+asdfgh
+lorem
+etymology
+lisp
+123
+1st
+3D
+R&D
+😀

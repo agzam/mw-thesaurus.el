@@ -1,4 +1,4 @@
-.PHONY: help deps test lint checkdoc melpazoid check-compile e2e clean
+.PHONY: help deps test lint checkdoc melpazoid check-compile e2e sweep clean
 
 ELPA := $(CURDIR)/.elpa
 SANDBOX := $(CURDIR)/.sandbox
@@ -26,6 +26,7 @@ help:
 	@echo "  make melpazoid     Run the harness a MELPA reviewer runs"
 	@echo "  make check-compile Check for clean byte-compilation"
 	@echo "  make e2e           Type the E2E cases into emacs -nw -q, beside origin/master"
+	@echo "  make sweep         Look a word list up in both versions and compare the pages"
 	@echo "  make clean         Remove compiled files and the sandbox"
 
 deps:
@@ -80,6 +81,21 @@ check-compile:
 # origin/master; needs tmux, Emacs 29 or newer and the network
 e2e:
 	$(EMACS) -l test/mw-thesaurus-e2e.el -f mw-e2e-main
+
+# each word of SWEEP_WORDS in origin/master's version and the checkout's,
+# through the answer cache; prints what differs and what looks broken
+SWEEP := $(CURDIR)/.e2e/sweep
+SWEEP_WORDS ?= test/sweep-words.txt
+SWEEP_CACHE := MW_E2E_CACHE=$${MW_E2E_CACHE:-$(CURDIR)/.e2e/cache}
+sweep:
+	@mkdir -p $(SWEEP)/main
+	@git show origin/master:mw-thesaurus.el > $(SWEEP)/main/mw-thesaurus.el
+	$(SWEEP_CACHE) $(EMACS) -L $(SWEEP)/main -l test/mw-thesaurus-sweep.el \
+	  --eval '(mw-sweep-run "$(SWEEP_WORDS)" "$(SWEEP)/main.eld" (list nil))'
+	$(SWEEP_CACHE) $(EMACS) -L . -l test/mw-thesaurus-sweep.el \
+	  --eval "(mw-sweep-run \"$(SWEEP_WORDS)\" \"$(SWEEP)/branch.eld\" '(thesaurus dictionary))"
+	$(EMACS) -l test/mw-thesaurus-sweep.el \
+	  --eval '(mw-sweep-compare "$(SWEEP)/main.eld" "$(SWEEP)/branch.eld")'
 
 clean:
 	rm -f *.elc
