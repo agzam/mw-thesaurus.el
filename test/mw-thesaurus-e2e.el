@@ -497,6 +497,9 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
 
 (defun mw-e2e-main ()
   "Run every profile of `mw-e2e--profiles' and exit non-zero on a failure."
+  (unless (seq-some #'mw-e2e--selected-cases mw-e2e--profiles)
+    (error "No case label matches MW_E2E_CASES %S, an Emacs regexp (\\| between labels)"
+           mw-e2e--only))
   (make-directory mw-e2e--dir t)
   (mw-e2e--packages)
   (unwind-protect
