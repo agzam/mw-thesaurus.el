@@ -56,7 +56,7 @@
                  (mw-thesaurus--format-text "{bc}lacking strength"))))
 
 (defconst mw-thesaurus-test--dictionary-words
-  '("decline" "set" "conception" "cowl" "happy" "both" "tearaway" "borstal" "went")
+  '("decline" "set" "conception" "cowl" "happy" "both" "tearaway" "borstal" "went" "been")
   "Words with a Collegiate Dictionary response in ./assets.")
 
 (defun mw-thesaurus-test--dictionary (word)
@@ -80,6 +80,10 @@ The zero-width spaces around italics are left out."
       (should-not (string-match-p "^\\*+ *$" org))
       ;; Org shows a line that starts with a colon as fixed-width text.
       (should-not (string-match-p "^ *:" org)))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-cross-reference-italics-test ()
+  (should (string-match-p "^  — compare be sense /auxiliary verb/ 5$"
+                          (mw-thesaurus-test--dictionary "been"))))
 
 (ert-deftest mw-thesaurus--dictionary-parse-sense-groups-test ()
   (let ((org (mw-thesaurus-test--dictionary "conception")))

@@ -243,8 +243,9 @@ dictionary's recording of it."
    (seq-remove #'stringp data) ""))
 
 (defconst mw-thesaurus--cross-reference-regexp
-  "{\\(?:sx\\|dxt\\)|\\([^|}:]*\\)\\(?::\\([^|}]*\\)\\)?|[^|}]*|\\([^|}]*\\)}"
-  "A cross-reference to a dictionary entry: its word, entry number and sense.")
+  "{\\(?:sx\\|dxt\\)|\\([^|}:]*\\)\\(?::\\([^|}]*\\)\\)?|[^|}]*|\\(\\(?:[^|{}]\\|{/?it}\\)*\\)}"
+  "A cross-reference to a dictionary entry: its word, entry number and sense.
+The sense may hold italics, as in {dxt|be||{it}auxiliary verb{/it} 5}.")
 
 (defun mw-thesaurus--cross-reference (token)
   "Return the text of TOKEN, a cross-reference such as {dxt|stoop:1||3b}."
