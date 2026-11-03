@@ -1,66 +1,70 @@
 * decline ~verb~
-  de·cline | di-ˈklīn, dē- | declined; declining
+  de·cline [[mw-thesaurus-audio:declin03][di-ˈklīn]] dē-
+  declined; declining
 ** intransitive verb
-*** 1 : to become lower in amount or less in number
-    - The price of the stock /declined/.
-*** 2 : to tend toward an inferior state or weaker condition
-    - The patient's condition has /declined/.
-    - Employee morale /declined/ after the layoffs.
-*** 3 : to withhold consent
-    - We invited them but they /declined/.
-*** 4 a /of a celestial body/ : to sink toward setting
-    - the /declining/ sun
-*** b : to draw toward a close : wane
-    - As the day /declined/ into the afternoon … — Charles Dickens
-*** 5 a : to slope downward : descend
-*** b : to bend down : droop
-    - … eyes … /declining/ toward the ground … — Henry Fielding
-*** c : to stoop (see stoop entry 1 sense 3b) to what is unworthy
-    - … the direful shameful state Adam /declined/ into … — Edward Taylor
-*** 6 /archaic/ : to turn from a straight course : stray
+   1. to become lower in amount or less in number
+      The price of the stock /declined/.
+   2. to tend toward an inferior state or weaker condition
+      The patient's condition has /declined/.
+      Employee morale /declined/ after the layoffs.
+   3. to withhold consent
+      We invited them but they /declined/.
+   4.
+      a. /of a celestial body/ : to sink toward setting
+         the /declining/ sun
+      b. to draw toward a close : wane
+         As the day /declined/ into the afternoon … — Charles Dickens
+   5.
+      a. to slope downward : descend
+      b. to bend down : droop
+         … eyes … /declining/ toward the ground … — Henry Fielding
+      c. to stoop (see stoop entry 1 sense 3b) to what is unworthy
+         … the direful shameful state Adam /declined/ into … — Edward Taylor
+   6. /archaic/ : to turn from a straight course : stray
 ** transitive verb
-*** 1 a : to refuse especially courteously
-    - /decline/ an invitation
-    - /declined/ to give her name to the reporter
-*** b : to refuse to undertake, undergo, engage in, or comply with
-    - /decline/ battle
-*** 2 /grammar/ : to give in prescribed order the grammatical forms of (a noun, pronoun, or adjective)
-    - /decline/ the Latin adjective "brevis"
-*** 3 : to cause to bend or bow downward
-    - … the clover … /declines/ its blooms. — W. C. Bryant
-*** 4 /obsolete/
-*** a : avert
-    - … evasions are sought to /decline/ the pressure of resistless arguments … — Samuel Johnson
-*** b : avoid
-    - … sinners … despairing to /decline/ their fate … — Thomas Ken
+   1.
+      a. to refuse especially courteously
+         /decline/ an invitation
+         /declined/ to give her name to the reporter
+      b. to refuse to undertake, undergo, engage in, or comply with
+         /decline/ battle
+   2. /grammar/ : to give in prescribed order the grammatical forms of (a noun, pronoun, or adjective)
+      /decline/ the Latin adjective "brevis"
+   3. to cause to bend or bow downward
+      … the clover … /declines/ its blooms. — W. C. Bryant
+   4. /obsolete/
+      a. avert
+         … evasions are sought to /decline/ the pressure of resistless arguments … — Samuel Johnson
+      b. avoid
+         … sinners … despairing to /decline/ their fate … — Thomas Ken
 ** Word history
    Etymology: Middle English, from Anglo-French /decliner/, from Latin /declinare/ to turn aside, inflect, from /de-/ + /clinare/ to incline — more at lean
    First known use: 14th century
 * decline ~noun~
-  de·cline | di-ˈklīn, dē-, also ˈdē-ˌklīn
-** 1 : the process of declining
-   - a period of economic /decline/
-   - a /decline/ in the local bird population
-   such as
-** a : a gradual deterioration in physical or mental function
-   - age-related cognitive /decline/
-** b : a change to a lower state or level
-   - the /decline/ of the aristocracy
-** 2 : the period during which something is deteriorating or approaching its end
-   - an empire in /decline/
-** 3 : a downward slope
-   - built on a slight /decline/
+  de·cline [[mw-thesaurus-audio:declin03][di-ˈklīn]] dē- also [[mw-thesaurus-audio:declin06][ˈdē-ˌklīn]]
+  1. the process of declining
+     a period of economic /decline/
+     a /decline/ in the local bird population
+     such as
+     a. a gradual deterioration in physical or mental function
+        age-related cognitive /decline/
+     b. a change to a lower state or level
+        the /decline/ of the aristocracy
+  2. the period during which something is deteriorating or approaching its end
+     an empire in /decline/
+  3. a downward slope
+     built on a slight /decline/
 ** Word history
    Etymology: see decline entry 1
    First known use: 14th century
 * in decline ~phrase~
-** to become less powerful, wealthy, etc.
-   - There was a general feeling that the country was /in decline/.
+  to become less powerful, wealthy, etc.
+  There was a general feeling that the country was /in decline/.
 * in terminal decline ~phrase~
   /British/
-** getting worse without any chance to improve
-   - The business is /in terminal decline/.
+  getting worse without any chance to improve
+  The business is /in terminal decline/.
 * on the decline ~phrase~
-** becoming worse in condition or less in size, amount, number, etc. : declining
-   - His health is /on the decline/.
-   - Sales are /on the decline/.
+  becoming worse in condition or less in size, amount, number, etc. : declining
+  His health is /on the decline/.
+  Sales are /on the decline/.

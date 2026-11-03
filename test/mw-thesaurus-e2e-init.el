@@ -30,13 +30,28 @@
 (defvar mw-e2e-hook-ran nil
   "Non-nil once `mw-thesaurus-mode-hook' ran in the current case.")
 
-(defun mw-e2e-defaults ()
-  "Return the values a case may change, for the reset to restore.
+(defconst mw-e2e-variables
+  '(mw-thesaurus-api-key mw-thesaurus--base-url mw-thesaurus--api-url
+    mw-thesaurus-dictionary-api-key mw-thesaurus--dictionary-api-url
+    mw-thesaurus-audio-player exec-path)
+  "The variables a case may change.
 1.1.0 keeps the URL in `mw-thesaurus--base-url', later versions in
-`mw-thesaurus--api-url'."
+`mw-thesaurus--api-url'.  The dictionary came after 1.4.0.")
+
+;; Recordings download under it; a run must not reuse the user's.
+(setq temporary-file-directory
+      (file-name-as-directory (make-temp-file "mw-e2e-tmp" t)))
+(let ((dir temporary-file-directory))
+  (add-hook 'kill-emacs-hook (lambda () (delete-directory dir t))))
+
+(defun mw-e2e--audio-dir ()
+  "Return the directory the recordings download into."
+  (expand-file-name "mw-thesaurus/" temporary-file-directory))
+
+(defun mw-e2e-defaults ()
+  "Return the bound `mw-e2e-variables' with their values, for the reset."
   (mapcar (lambda (var) (cons var (symbol-value var)))
-          (seq-filter #'boundp '(mw-thesaurus-api-key mw-thesaurus--base-url
-                                 mw-thesaurus--api-url))))
+          (seq-filter #'boundp mw-e2e-variables)))
 
 (defvar mw-e2e-defaults (mw-e2e-defaults)
   "The values a case may change and the reset restores.")
@@ -56,6 +71,12 @@
 
 (advice-add 'mw-thesaurus--lookup-word :before
             (lambda (word &rest _) (mw-e2e--log 'lookup word))
+            '((name . mw-e2e)))
+
+(advice-add 'make-process :before
+            (lambda (&rest args)
+              (when (equal "mw-thesaurus-audio" (plist-get args :name))
+                (mw-e2e--log 'play (string-join (plist-get args :command) " "))))
             '((name . mw-e2e)))
 
 ;; The Org text is the last string argument in every version of the package.
@@ -87,7 +108,16 @@
 
 (defun mw-e2e-reset (text point)
   "Start a case: one window on e2e.txt holding TEXT, point at POINT."
-  (dolist (var mw-e2e-defaults) (set (car var) (cdr var)))
+  ;; A variable this version lacks goes unbound, so a later upgrade's
+  ;; defcustom sets it instead of keeping what an earlier case set.
+  (dolist (var mw-e2e-variables)
+    (if-let* ((default (assq var mw-e2e-defaults)))
+        (set var (cdr default))
+      (makunbound var)))
+  (when (bound-and-true-p xterm-mouse-mode) (xterm-mouse-mode -1))
+  (advice-remove 'url-retrieve 'mw-e2e-slow)
+  (remove-hook 'org-mode-hook #'org-indent-mode)
+  (delete-directory (mw-e2e--audio-dir) t)
   (when-let* ((buffer (get-buffer mw-thesaurus-buffer-name)))
     (kill-buffer buffer))
   (delete-other-windows)
@@ -143,10 +173,22 @@
                                  (push (match-string-no-properties 0) heads))
                                (nreverse heads)))
                     :senses (count-matches "^\\*\\* " (point-min) (point-max))
+                    :indented (count-matches "^[ \t]" (point-min) (point-max))
+                    :text (buffer-substring-no-properties (point-min) (point-max))
+                    :faces (sort (delete-dups
+                                  (seq-filter
+                                   (lambda (face) (and face (symbolp face)))
+                                   (mapcar (lambda (overlay) (overlay-get overlay 'face))
+                                           (overlays-in (point-min) (point-max)))))
+                                 #'string<)
                     :reference (bound-and-true-p mw-thesaurus--reference)
-                    :header (when-let* ((window (get-buffer-window thesaurus)))
-                              (substring-no-properties
-                               (format-mode-line header-line-format nil window thesaurus)))
+                    :header (when-let* ((line (mw-e2e--header-line)))
+                              (substring-no-properties line))
+                    :current (when-let* ((line (mw-e2e--header-line)))
+                               (seq-find (lambda (label)
+                                           (when-let* ((at (string-search label line)))
+                                             (eq 'bold (get-text-property at 'face line))))
+                                         '("Thesaurus" "Dictionary")))
                     :mode major-mode
                     :org (and (derived-mode-p 'org-mode) t)
                     :mw (or (bound-and-true-p mw-thesaurus-mode)
@@ -162,6 +204,12 @@
                             :point (point)
                             :mark-active mark-active)))
           :lookups (mw-e2e--texts 'lookup)
+          :plays (mw-e2e--texts 'play)
+          :audio (when (file-directory-p (mw-e2e--audio-dir))
+                   (mapcar (lambda (file)
+                             (cons (file-name-nondirectory file)
+                                   (file-attribute-size (file-attributes file))))
+                           (directory-files (mw-e2e--audio-dir) t "\\.mp3\\'")))
           :outcomes (mw-e2e--texts 'outcome)
           :errors (mw-e2e--texts 'error)
           :renders (length (seq-filter (lambda (e) (eq (nth 1 e) 'render)) mw-e2e-events))
@@ -171,6 +219,36 @@
                                                                 (buffer-name b)))
                                    (buffer-list))
           :asking (mw-e2e-processes))))
+
+(defun mw-e2e-slow-replies (seconds)
+  "Hold each `url-retrieve' answer for SECONDS, until the next case."
+  (advice-add 'url-retrieve :filter-args
+              (lambda (args)
+                (let ((callback (nth 1 args)))
+                  (append (list (car args)
+                                (lambda (&rest status)
+                                  ;; The callback reads the answer from its buffer.
+                                  (let ((buffer (current-buffer)))
+                                    (run-at-time seconds nil
+                                                 (lambda ()
+                                                   (with-current-buffer buffer
+                                                     (apply callback status)))))))
+                          (nthcdr 2 args))))
+              '((name . mw-e2e-slow))))
+
+(defun mw-e2e--header-line ()
+  "Return the header line of the thesaurus buffer as its window shows it."
+  (when-let* ((buffer (get-buffer mw-thesaurus-buffer-name))
+              (window (get-buffer-window buffer)))
+    (format-mode-line (buffer-local-value 'header-line-format buffer) nil window buffer)))
+
+(defun mw-e2e-header-position (label)
+  "Return the screen column and row, from 1, of LABEL in the header line."
+  (when-let* ((line (mw-e2e--header-line))
+              (at (string-search label line))
+              (window (get-buffer-window mw-thesaurus-buffer-name)))
+    (cons (+ 1 (window-left-column window) at)
+          (+ 1 (window-top-line window)))))
 
 (defun mw-e2e--point (buffer)
   "Return point in BUFFER, as its window shows it when it has one."

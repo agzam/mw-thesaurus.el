@@ -84,10 +84,16 @@ The zero-width spaces around italics are left out."
 (ert-deftest mw-thesaurus--dictionary-parse-sense-groups-test ()
   (let ((org (mw-thesaurus-test--dictionary "conception")))
     (should (string-match-p
-             (concat "^\\*\\* 1 a (1) : the process of becoming pregnant involving"
+             (concat "^  1\\.\n"
+                     "     a\\.\n"
+                     "        1) the process of becoming pregnant involving"
                      " fertilization or implantation or both\n"
-                     "\\*\\* (2) : embryo, fetus\n"
-                     "\\*\\* b : beginning\n")
+                     "        2) embryo, fetus\n"
+                     "     b\\. beginning\n"
+                     "        \"Joy had the like /conception/ in our eyes …\""
+                     " — William Shakespeare\n"
+                     "  2\\.\n"
+                     "     a\\. the capacity, ")
              org))
     (should (string-match-p
              (concat "^   Etymology: Middle English /concepcioun/, from Anglo-French"
@@ -99,21 +105,25 @@ The zero-width spaces around italics are left out."
 (ert-deftest mw-thesaurus--dictionary-parse-senses-without-numbers-test ()
   (should (string-match-p
            (concat "^\\* cowl ~verb~\n  cowled; cowling; cowls\n"
-                   "\\*\\* transitive verb\n\\*\\*\\* to cover with or as if with a cowl\n"
+                   "\\*\\* transitive verb\n   to cover with or as if with a cowl\n"
                    "\\*\\* Word history\n   First known use: 1536\n")
            (mw-thesaurus-test--dictionary "cowl")))
-  (should (string-match-p "^\\*\\* c : cowling$" (mw-thesaurus-test--dictionary "cowl")))
-  (should (equal (concat "* tearaway ~noun~\n  tear·away | ˈter-ə-ˌwā\n  /British/\n"
-                         "** a rebellious and unruly or reckless young person\n"
+  (should (string-match-p "^     c\\. cowling$" (mw-thesaurus-test--dictionary "cowl")))
+  (should (equal (concat "* tearaway ~noun~\n"
+                         "  tear·away [[mw-thesaurus-audio:tearaw01][ˈter-ə-ˌwā]]\n"
+                         "  /British/\n"
+                         "  a rebellious and unruly or reckless young person\n"
                          "** Word history\n   First known use: 1950\n"
                          "* tear away ~verb~\n"
                          "  tore away; torn away; tearing away; tears away\n"
                          "** transitive verb\n"
-                         "*** to remove (someone, such as oneself) reluctantly\n"
+                         "   to remove (someone, such as oneself) reluctantly\n"
                          "** Word history\n   First known use: circa 1699\n")
                  (mw-thesaurus-test--dictionary "tearaway")))
-  (should (equal (concat "* Borstal ~noun~\n  Bor·stal | ˈbȯr-stᵊl\n  /British/\n"
-                         "** reformatory\n"
+  (should (equal (concat "* Borstal ~noun~\n"
+                         "  Bor·stal [[mw-thesaurus-audio:borsta01][ˈbȯr-stᵊl]]\n"
+                         "  /British/\n"
+                         "  reformatory\n"
                          "** Word history\n"
                          "   Etymology: /Borstal/, English village where the first"
                          " such institution was set up\n"
@@ -122,29 +132,35 @@ The zero-width spaces around italics are left out."
 
 (ert-deftest mw-thesaurus--dictionary-parse-biographical-names-test ()
   (should (string-match-p
-           (concat "^\\* Cowl ~biographical name~\n  ˈkau̇(-ə)l\n"
-                   "\\*\\* Jane 1883–1950 originally /Grace Bailey/ American actress\n")
+           (concat "^\\* Cowl ~biographical name~\n"
+                   "  \\[\\[mw-thesaurus-audio:bixcow04\\]\\[ˈkau̇(-ə)l\\]\\]\n"
+                   "  Jane 1883–1950 originally /Grace Bailey/ American actress\n")
            (mw-thesaurus-test--dictionary "cowl"))))
 
 (ert-deftest mw-thesaurus--dictionary-parse-divided-senses-test ()
   (let ((happy (mw-thesaurus-test--dictionary "happy")))
     (should (string-match-p
-             (concat "^\\*\\* 1 : informal talk among the participants in a television"
+             (concat "^  1\\. informal talk among the participants in a television"
                      " news broadcast\n"
-                     "   /also/ : a broadcast format featuring such talk\n"
-                     "\\*\\* 2 : optimistic talk\n")
+                     "     /also/ : a broadcast format featuring such talk\n"
+                     "  2\\. optimistic talk\n")
              happy))
     (should (string-match-p
-             (concat "^\\*\\* 1 : irresponsible in the use of firearms\n"
-                     "   /especially/ : inclined to shoot before clearly identifying"
+             (concat "^  1\\. irresponsible in the use of firearms\n"
+                     "     /especially/ : inclined to shoot before clearly identifying"
                      " the target\n")
              happy)))
   (should (string-match-p
-           (concat "^\\*\\*\\* 12 a : to adjust (a device and especially a measuring"
+           (concat "^   10\\. to fix or decide on as a time, limit, or regulation : prescribe\n"
+                   "       /set/ a wedding day\n")
+           (mw-thesaurus-test--dictionary "set")))
+  (should (string-match-p
+           (concat "^   12\\.\n"
+                   "      a\\. to adjust (a device and especially a measuring"
                    " device) to a desired position\n"
-                   "    - /set/ the alarm for 7:00\n"
-                   "    - /set/ a thermostat at 68\n"
-                   "    /also/ : to adjust (something, such as a clock) in conformity"
+                   "         /set/ the alarm for 7:00\n"
+                   "         /set/ a thermostat at 68\n"
+                   "         /also/ : to adjust (something, such as a clock) in conformity"
                    " with a standard\n")
            (mw-thesaurus-test--dictionary "set"))))
 
@@ -152,11 +168,11 @@ The zero-width spaces around italics are left out."
   (let ((org (mw-thesaurus-test--dictionary "both")))
     (should (string-match-p
              (concat "^\\* both ~conjunction~\n"
-                     "\\*\\* — used as a function word to indicate and stress the"
+                     "  used as a function word to indicate and stress the"
                      " inclusion of each of two or more things specified by"
                      " coordinated words, phrases, or clauses\n"
-                     "   - prized /both/ for its beauty and for its utility\n"
-                     "   - he … who loveth well /both/ man and bird and beast"
+                     "  prized /both/ for its beauty and for its utility\n"
+                     "  he … who loveth well /both/ man and bird and beast"
                      " — S. T. Coleridge\n"
                      "\\*\\* Word history\n"
                      "   Etymology: Middle English /bothe,/ from the use of the"
@@ -441,7 +457,7 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
                      (plist-get result :urls)))
       (should (equal '("decline") (plist-get result :words)))
       (should (equal '(dictionary) (plist-get result :references)))
-      (should (string-prefix-p "* decline ~verb~\n  de·cline | "
+      (should (string-prefix-p "* decline ~verb~\n  de·cline [[mw-thesaurus-audio:declin03]"
                                (car (plist-get result :rendered))))
       (should-not (plist-get result :messages)))))
 
@@ -719,6 +735,227 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
 (ert-deftest mw-thesaurus-switch-reference-needs-a-page-test ()
   (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test-none*"))
     (should-error (mw-thesaurus-switch-reference) :type 'user-error)))
+
+(ert-deftest mw-thesaurus--audio-url-test ()
+  (dolist (case '(("declin03" . "d/declin03") ("bixcow04" . "bix/bixcow04")
+                  ("ggmain01" . "gg/ggmain01") ("3d000001" . "number/3d000001")
+                  ("_abc001" . "number/_abc001")))
+    (should (equal (concat "https://media.merriam-webster.com/audio/prons/en/us/mp3/"
+                           (cdr case) ".mp3")
+                   (mw-thesaurus--audio-url (car case))))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-pronunciation-links-test ()
+  (let ((org (mw-thesaurus-test--dictionary "decline")))
+    (should (string-match-p
+             "^  de·cline \\[\\[mw-thesaurus-audio:declin03\\]\\[di-ˈklīn\\]\\] dē-\n  declined; declining$"
+             org))
+    (should (string-match-p
+             (concat "^  de·cline \\[\\[mw-thesaurus-audio:declin03\\]\\[di-ˈklīn\\]\\] dē-"
+                     " also \\[\\[mw-thesaurus-audio:declin06\\]\\[ˈdē-ˌklīn\\]\\]$")
+             org))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-marks-faces-test ()
+  (let* ((org (mw-thesaurus--dictionary-parse
+               (mw-thesaurus-test--read (mw-thesaurus-test--asset "dictionary-decline.json"))))
+         (face-at (lambda (text)
+                    (get-text-property (string-match (regexp-quote text) org)
+                                       'mw-thesaurus-face org))))
+    (should (eq 'mw-thesaurus-syllables (funcall face-at "de·cline")))
+    (should (eq 'mw-thesaurus-pronunciation (funcall face-at "dē-")))
+    (should (eq 'mw-thesaurus-pronunciation (funcall face-at "also")))
+    (should (eq 'mw-thesaurus-example (funcall face-at "The price of the stock")))
+    (should (eq 'mw-thesaurus-example (funcall face-at "— Charles Dickens")))
+    (should-not (funcall face-at "[[mw-thesaurus-audio:declin03]"))
+    (should-not (funcall face-at "declined; declining"))
+    (should-not (funcall face-at "to become lower"))))
+
+(ert-deftest mw-thesaurus--sense-bullets-test ()
+  (should (equal '((0 . "1.") (1 . "a.") (2 . "1)")) (mw-thesaurus--sense-bullets "1 a (1)")))
+  (should (equal '((1 . "c.") (2 . "1)")) (mw-thesaurus--sense-bullets "c (1)")))
+  (should (equal '((1 . "b.")) (mw-thesaurus--sense-bullets "b")))
+  (should (equal '((2 . "2)")) (mw-thesaurus--sense-bullets "(2)")))
+  (should (equal '((0 . "12.")) (mw-thesaurus--sense-bullets "12")))
+  (should-not (mw-thesaurus--sense-bullets nil)))
+
+(defun mw-thesaurus-test--decline-page ()
+  "Return the dictionary page for \"decline\" in ./assets, as the parser makes it."
+  (mw-thesaurus--dictionary-parse
+   (mw-thesaurus-test--read (mw-thesaurus-test--asset "dictionary-decline.json"))))
+
+(ert-deftest mw-thesaurus--show-gives-marked-text-its-face-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+        (face-at (lambda (text)
+                   (goto-char (point-min))
+                   (search-forward text)
+                   (get-char-property (match-beginning 0) 'face))))
+    (unwind-protect
+        (progn
+          (mw-thesaurus-test--pages (list "decline" (mw-thesaurus-test--decline-page) 'dictionary))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should (eq 'mw-thesaurus-syllables (funcall face-at "de·cline")))
+            (should (eq 'mw-thesaurus-example (funcall face-at "Employee morale"))))
+          (mw-thesaurus-test--pages '("sun" "* sun ~noun~\n"))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should-not (overlays-in (point-min) (point-max)))
+            (mw-thesaurus-back)
+            (should (eq 'mw-thesaurus-pronunciation (funcall face-at "dē-")))
+            (should (eq 'mw-thesaurus-example (funcall face-at "Employee morale")))
+            (should-not (funcall face-at "to become lower"))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus--play-downloads-once-test ()
+  (let* ((temporary-file-directory (make-temp-file "mw-audio" t))
+         (mw-thesaurus-audio-player '("player" "-q"))
+         downloads commands)
+    (unwind-protect
+        (cl-letf (((symbol-function 'url-retrieve)
+                   (lambda (url callback &rest _)
+                     (push url downloads)
+                     (with-temp-buffer
+                       (set-buffer-multibyte nil)
+                       (insert "HTTP/1.1 200 OK\r\nContent-Type: audio/mpeg\r\n\r\nID3\377\373")
+                       (funcall callback nil))))
+                  ((symbol-function 'make-process)
+                   (lambda (&rest args) (push (plist-get args :command) commands))))
+          (mw-thesaurus--play "declin03")
+          (mw-thesaurus--play "declin03")
+          (let ((file (expand-file-name "mw-thesaurus/declin03.mp3" temporary-file-directory)))
+            (should (equal '("https://media.merriam-webster.com/audio/prons/en/us/mp3/d/declin03.mp3")
+                           downloads))
+            (should (equal (list (list "player" "-q" file) (list "player" "-q" file)) commands))
+            (should (equal "ID3\377\373"
+                           (with-temp-buffer
+                             (set-buffer-multibyte nil)
+                             (insert-file-contents-literally file)
+                             (buffer-string))))))
+      (delete-directory temporary-file-directory t))))
+
+(ert-deftest mw-thesaurus--play-without-a-player-test ()
+  (let ((mw-thesaurus-audio-player nil))
+    (cl-letf (((symbol-function 'executable-find) #'ignore))
+      (should-error (mw-thesaurus--play "declin03") :type 'user-error))))
+
+(ert-deftest mw-thesaurus-ret-plays-a-pronunciation-test ()
+  (should (eq #'mw-thesaurus--play (org-link-get-parameter "mw-thesaurus-audio" :follow)))
+  (let (played)
+    (cl-letf (((symbol-function 'mw-thesaurus--play) (lambda (audio &rest _) (push audio played)))
+              ((symbol-function 'url-retrieve) (lambda (&rest _) (error "No lookup expected"))))
+      (with-temp-buffer
+        (let ((inhibit-read-only t))
+          (insert "* decline ~verb~\n  de·cline [[mw-thesaurus-audio:declin03][di-ˈklīn]] dē-\n"))
+        (mw-thesaurus-mode)
+        (goto-char (point-min))
+        (search-forward "klīn")
+        (call-interactively #'mw-thesaurus-lookup-at-point)))
+    (should (equal '("declin03") played))))
+
+(defun mw-thesaurus-test--gui-color-values (color &optional _frame)
+  "Return the RGB values of COLOR as a graphic frame does.
+A batch Emacs gives the nearest of its few terminal colors."
+  (tty-color-standard-values color))
+
+(ert-deftest mw-thesaurus--svg-color-test ()
+  (cl-letf (((symbol-function 'color-values) #'mw-thesaurus-test--gui-color-values))
+    (should (equal "#343a47" (mw-thesaurus--svg-color "#33cd39d34713")))
+    (should (equal "#8fa1b3" (mw-thesaurus--svg-color "#8fa1b3")))
+    (should (equal "#ffffff" (mw-thesaurus--svg-color "white")))
+    (should (equal "#616d7d" (mw-thesaurus--svg-color "#33cd39d34713" "#8fa1b3" 0.5)))))
+
+(ert-deftest mw-thesaurus--audio-svg-test ()
+  (cl-letf (((symbol-function 'color-values) #'mw-thesaurus-test--gui-color-values)
+            ((symbol-function 'face-font) (lambda (&rest _) "Fira Code-18"))
+            ;; An 18-pixel font: a 23-pixel line, ascent 17, descent 6.
+            ((symbol-function 'font-info)
+             (lambda (&rest _) ["Fira Code-18" "Fira Code" 18 23 0 0 0 11 17 6 11 11 nil nil]))
+            ((symbol-function 'default-font-width) (lambda () 11))
+            ((symbol-function 'face-foreground) (lambda (&rest _) "#8fa1b3"))
+            ((symbol-function 'face-background) (lambda (&rest _) "#33cd39d34713")))
+    (let* ((svg (mw-thesaurus--audio-svg "di-ˈklīn"))
+           (rect (car (dom-by-tag svg 'rect)))
+           (text (car (dom-by-tag svg 'text)))
+           (speaker (mapcar (lambda (point) (string-to-number point))
+                            (split-string (dom-attr (car (dom-by-tag svg 'polygon)) 'points)
+                                          "[ ,]+" t))))
+      (should (equal 27 (dom-attr svg 'height)))
+      (should (equal 133 (dom-attr svg 'width)))
+      (should (equal 13.5 (dom-attr rect 'rx)))
+      (should (equal "#3f4654" (dom-attr rect 'fill)))
+      (should (equal "#616d7d" (dom-attr rect 'stroke)))
+      (should (string-prefix-p "di-" (dom-text text)))
+      (should (equal "#8fa1b3" (dom-attr text 'fill)))
+      (should (equal 13.5 (dom-attr text 'x)))
+      ;; Emacs puts the baseline 19 pixels down a 27-pixel image it centers.
+      (should (equal 19 (dom-attr text 'y)))
+      ;; The speaker and its two waves come after 8 columns of text.
+      (should (< (+ 13.5 (* 8 11)) (seq-min (mapcar #'car (seq-partition speaker 2)))))
+      (should (equal 2 (length (dom-by-tag svg 'path)))))))
+
+(ert-deftest mw-thesaurus--show-draws-pronunciation-buttons-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+        played)
+    (unwind-protect
+        (cl-letf (((symbol-function 'display-graphic-p) (lambda (&rest _) t))
+                  ((symbol-function 'image-type-available-p) (lambda (&rest _) t))
+                  ((symbol-function 'mw-thesaurus--audio-svg) (lambda (text) (list 'svg nil text)))
+                  ((symbol-function 'svg-image)
+                   (lambda (svg &rest props) (append (list 'image :svg svg) props)))
+                  ((symbol-function 'mw-thesaurus--play)
+                   (lambda (audio &rest _) (push audio played))))
+          (mw-thesaurus-test--pages (list "decline" (mw-thesaurus-test--decline-page) 'dictionary))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should (equal 3 (seq-count (lambda (overlay) (overlay-get overlay 'button))
+                                        (overlays-in (point-min) (point-max)))))
+            (goto-char (point-min))
+            (search-forward "[[mw-thesaurus-audio:declin06][ˈdē-ˌklīn]]")
+            (let ((button (button-at (match-beginning 0))))
+              (should (equal (match-end 0) (button-end button)))
+              (should (equal '(image :svg (svg nil "ˈdē-ˌklīn") :scale 1 :ascent center)
+                             (button-get button 'display)))
+              (should (equal '(:underline nil) (button-get button 'face)))
+              (should (button-get button 'follow-link))
+              (button-activate button))
+            (should (equal '("declin06") played))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus--show-keeps-pronunciation-links-without-svg-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (dolist (display '((nil . t) (t . nil)))
+          (cl-letf (((symbol-function 'display-graphic-p) (lambda (&rest _) (car display)))
+                    ((symbol-function 'image-type-available-p) (lambda (&rest _) (cdr display))))
+            (mw-thesaurus-test--pages
+             (list "decline" (mw-thesaurus-test--decline-page) 'dictionary))
+            (with-current-buffer mw-thesaurus-buffer-name
+              (should (search-forward "[[mw-thesaurus-audio:declin03]" nil t))
+              (should-not (seq-some (lambda (overlay) (overlay-get overlay 'button))
+                                    (overlays-in (point-min) (point-max)))))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus--show-leaves-indentation-to-org-indent-mode-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+        (shown (concat "* decline ~verb~\nde·cline\n** intransitive verb\n"
+                       "4.\n   a. to sink\n      the declining sun\n")))
+    (unwind-protect
+        (progn
+          (add-hook 'org-mode-hook #'org-indent-mode)
+          (mw-thesaurus-test--pages
+           (list "decline"
+                 (concat "* decline ~verb~\n  de·cline\n** intransitive verb\n"
+                         "   4.\n      a. to sink\n         the declining sun\n")
+                 'dictionary))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should org-indent-mode)
+            (should (equal shown (buffer-string)))
+            (search-forward "the declining")
+            (goto-char (match-beginning 0)))
+          (mw-thesaurus-test--pages '("sun" "* sun ~noun~\n"))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (mw-thesaurus-back)
+            ;; The page comes back as it was shown, not unindented twice.
+            (should (equal shown (buffer-string)))
+            (should (looking-at-p "the declining sun"))))
+      (remove-hook 'org-mode-hook #'org-indent-mode)
+      (kill-buffer mw-thesaurus-buffer-name))))
 
 (ert-deftest mw-thesaurus-mode-derives-from-org-mode-test ()
   (with-temp-buffer
