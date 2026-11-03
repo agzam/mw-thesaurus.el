@@ -364,6 +364,31 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (mw-thesaurus-mode)
     (should (eq #'mw-thesaurus-back (key-binding (kbd "l"))))))
 
+(ert-deftest mw-thesaurus-mode-writable-page-types-keys-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    (read-only-mode -1)
+    (should (eq #'org-self-insert-command (key-binding "q")))
+    (should (eq #'org-self-insert-command (key-binding "l")))
+    (should (eq #'org-return (key-binding (kbd "RET"))))
+    (should-not (command-remapping 'evil-ret))
+    (should-not (command-remapping 'evil-record-macro))
+    (should-not (command-remapping 'evil-window-top))
+    (should (eq #'mw-thesaurus-lookup-at-point (key-binding (kbd "C-c C-o"))))
+    (read-only-mode 1)
+    (should (eq #'mw-thesaurus--quit (key-binding "q")))
+    (should (eq #'mw-thesaurus-back (command-remapping 'evil-window-top)))
+    (should (eq #'mw-thesaurus-lookup-at-point (key-binding (kbd "C-c C-o"))))))
+
+(ert-deftest mw-thesaurus-mode-keeps-org-overriding-maps-test ()
+  (let ((org-modes (with-temp-buffer
+                     (org-mode)
+                     (mapcar #'car minor-mode-overriding-map-alist))))
+    (with-temp-buffer
+      (mw-thesaurus-mode)
+      (should (equal (cons 'buffer-read-only org-modes)
+                     (mapcar #'car minor-mode-overriding-map-alist))))))
+
 (defun mw-thesaurus-test--pages (&rest pages)
   "Show PAGES, each (WORD TEXT), in a thesaurus buffer that no window shows."
   (cl-letf (((symbol-function 'switch-to-buffer-other-window) #'ignore))

@@ -46,6 +46,12 @@
 (defvar mw-thesaurus-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map [remap org-open-at-point] #'mw-thesaurus-lookup-at-point)
+    map)
+  "Keymap for `mw-thesaurus-mode'.
+Single keys go in `mw-thesaurus-read-only-map'.")
+
+(defvar mw-thesaurus-read-only-map
+  (let ((map (make-sparse-keymap)))
     ;; Evil's state maps outrank this map; a remap reaches past them.
     (define-key map [remap evil-ret] #'mw-thesaurus-lookup-at-point)
     (define-key map [remap evil-record-macro] #'mw-thesaurus--quit)
@@ -54,7 +60,9 @@
     (define-key map (kbd "l") #'mw-thesaurus-back)
     (define-key map (kbd "q") #'mw-thesaurus--quit)
     map)
-  "Keymap for `mw-thesaurus-mode'.")
+  "Keymap of a read-only page in `mw-thesaurus-mode'.
+It outranks `mw-thesaurus-mode-map'.  After \\[read-only-mode] the page
+types these keys, and evil's keys work as in any buffer.")
 
 (defvar mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *"
   "Default buffer name for Merriam-Webster Thesaurus.")
@@ -72,9 +80,15 @@ Each page is a list (WORD TEXT POINT).")
 
 (define-derived-mode mw-thesaurus-mode org-mode "Merriam-Webster"
   "Major mode for Merriam-Webster thesaurus entries, derived from Org mode.
-\\{mw-thesaurus-mode-map}"
+\\{mw-thesaurus-mode-map}
+On a read-only page:
+\\{mw-thesaurus-read-only-map}"
   :group 'mw-thesaurus
   (setq-local org-hide-emphasis-markers t)
+  ;; As in `diff-mode', single keys act only while the page is read-only.
+  (setq-local minor-mode-overriding-map-alist
+              (cons (cons 'buffer-read-only mw-thesaurus-read-only-map)
+                    minor-mode-overriding-map-alist))
   (setq buffer-read-only t))
 
 (defcustom mw-thesaurus-api-key

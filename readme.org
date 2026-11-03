@@ -53,7 +53,7 @@ Doom binds ~RET~ in Org buffers to ~+org/dwim-at-point~ through ~evil-org-mode-m
 
 #+begin_src emacs-lisp
 (map! :after mw-thesaurus
-      :map mw-thesaurus-mode-map
+      :map mw-thesaurus-read-only-map
       [remap evil-record-macro] #'mw-thesaurus--quit
       [remap +org/dwim-at-point] #'mw-thesaurus-lookup-at-point)
 #+end_src
@@ -69,3 +69,5 @@ If the word has no entry, e.g. because of a typo, the first spelling suggestion 
 ~l~ (~H~ with evil) go back to the previous lookup, without a new request
 
 ~q~ kill mw-thesaurus buffer and close the window
+
+These keys act while the page is read-only, as it is after every lookup. ~C-x C-q~ makes the page writable: then it types them, and evil's keys work as in any buffer. ~C-c C-o~ looks up the word at point either way. Bind your own single keys in ~mw-thesaurus-read-only-map~, which outranks ~mw-thesaurus-mode-map~.

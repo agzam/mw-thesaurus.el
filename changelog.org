@@ -3,6 +3,12 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
+* [Unreleased]
+
+** Changed
+- ~RET~, ~l~ and ~q~ in the thesaurus buffer, and evil's ~RET~, ~H~ and ~q~, act only while the page is read-only, as it is after every lookup; after ~C-x C-q~ the page types them and evil's keys work as in any buffer
+- these keys live in the new ~mw-thesaurus-read-only-map~, which outranks ~mw-thesaurus-mode-map~; a single-key binding of your own, such as the readme's Doom remaps, goes there too
+
 * [1.4.0] - 2026-11-02
 
 ** Added
