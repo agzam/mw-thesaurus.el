@@ -11,7 +11,7 @@ This package allows you to lookup a word and displays its thesaurus definition i
 ** Entirely optional, and you don't have to do it at all
 Again, *this is not required for the package to work!* You may want to do it anyway.
 
-In order to use the Merriam-Webster API, it is necessary to register and obtain a free API key.
+In order to use the Merriam-Webster API, it is necessary to register and obtain a free API key for the Collegiate Thesaurus.
 
 A free key allows like 1000 lookups a day, and every user of this package shares the default one.
 
