@@ -3,7 +3,7 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
-* [Unreleased]
+* [2.0.0] - 2026-11-03
 
 ** Added
 - ~mw-thesaurus-dictionary-lookup-dwim~ looks up the region, the word at point or a word it asks for in the Merriam-Webster Collegiate Dictionary, with a shared key in ~mw-thesaurus-dictionary-api-key~; the idea and its first implementation come from Marty Hiatt's fork, [[https://codeberg.org/martianh/mw.el][mw.el]]
