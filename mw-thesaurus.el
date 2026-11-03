@@ -1,4 +1,4 @@
-;;; mw-thesaurus.el --- Merriam-Webster Thesaurus -*- lexical-binding: t; -*-
+;;; mw-thesaurus.el --- Merriam-Webster Thesaurus and Dictionary -*- lexical-binding: t; -*-
 ;;
 ;; Author: Ag Ibragimov <agzam.ibragimov@gmail.com>
 ;; URL: https://github.com/agzam/mw-thesaurus.el
@@ -23,10 +23,10 @@
 
 ;;; Commentary:
 
-;; Look up a word in the Merriam-Webster thesaurus at dictionaryapi.com and
-;; read its meanings, synonyms and antonyms in an Org buffer.
-;; `mw-thesaurus-lookup-dwim' looks up the region, the word at point, or a
-;; word it asks for.
+;; Look up a word in the Merriam-Webster thesaurus or Collegiate Dictionary
+;; at dictionaryapi.com and read its entries in an Org buffer.
+;; `mw-thesaurus-lookup-dwim' and `mw-thesaurus-dictionary-lookup-dwim' look
+;; up the region, the word at point, or a word they ask for.
 
 ;;; Code:
 
@@ -40,7 +40,7 @@
 (require 'ucs-normalize)
 
 (defgroup mw-thesaurus nil
-  "Merriam-Webster Thesaurus."
+  "Merriam-Webster Thesaurus and Dictionary."
   :prefix "mw-thesaurus-"
   :group 'applications)
 
@@ -68,8 +68,8 @@ Single keys go in `mw-thesaurus-read-only-map'.")
 It outranks `mw-thesaurus-mode-map'.  After \\[read-only-mode] the page
 types these keys, and evil's keys work as in any buffer.")
 
-(defvar mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *"
-  "Default buffer name for Merriam-Webster Thesaurus.")
+(defvar mw-thesaurus-buffer-name "* Merriam-Webster *"
+  "Name of the buffer that shows thesaurus and dictionary pages.")
 
 (defvar-local mw-thesaurus--word nil
   "The word whose entries the thesaurus buffer shows.")
@@ -900,7 +900,7 @@ REFERENCE, the thesaurus by default, can also be `dictionary'."
   (mw-thesaurus--lookup-word (mw-thesaurus-get-original-word beginning end) reference))
 
 (defun mw-thesaurus--quit ()
-  "Kill Merriam-Webster Thesaurus buffer."
+  "Quit the selected window and kill the Merriam-Webster buffer."
   (interactive)
   (when-let* ((buffer (get-buffer mw-thesaurus-buffer-name)))
     (quit-window)

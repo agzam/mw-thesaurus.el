@@ -657,6 +657,10 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
       (should (equal (cons 'buffer-read-only org-modes)
                      (mapcar #'car minor-mode-overriding-map-alist))))))
 
+(ert-deftest mw-thesaurus-buffer-name-test ()
+  ;; Users' `display-buffer-alist' rules match this name.
+  (should (equal "* Merriam-Webster *" mw-thesaurus-buffer-name)))
+
 (defun mw-thesaurus-test--pages (&rest pages)
   "Show PAGES, each (WORD TEXT), in a thesaurus buffer that no window shows."
   (cl-letf (((symbol-function 'switch-to-buffer-other-window) #'ignore))
