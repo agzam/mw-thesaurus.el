@@ -112,6 +112,22 @@ Each page is a list (WORD TEXT POINT REFERENCE).")
                              'local-map mw-thesaurus--header-line-map))))
            '(thesaurus dictionary) "   ")))
 
+(defun mw-thesaurus--read-only-keys ()
+  "Return `mw-thesaurus-read-only-map' less the keys bound in the mode map.
+The package binds none of those keys in `mw-thesaurus-mode-map', so one
+bound there is the user's, and it acts as it did when that map held every
+key."
+  (let ((map (copy-keymap mw-thesaurus-read-only-map)))
+    (map-keymap-internal
+     (lambda (event binding)
+       (if (and (eq event 'remap) (keymapp binding))
+           (map-keymap-internal
+            (lambda (command _) (define-key map (vector 'remap command) nil))
+            binding)
+         (define-key map (vector event) nil)))
+     mw-thesaurus-mode-map)
+    map))
+
 (define-derived-mode mw-thesaurus-mode org-mode "Merriam-Webster"
   "Major mode for Merriam-Webster thesaurus entries, derived from Org mode.
 \\{mw-thesaurus-mode-map}
@@ -121,7 +137,7 @@ On a read-only page:
   (setq-local org-hide-emphasis-markers t)
   ;; As in `diff-mode', single keys act only while the page is read-only.
   (setq-local minor-mode-overriding-map-alist
-              (cons (cons 'buffer-read-only mw-thesaurus-read-only-map)
+              (cons (cons 'buffer-read-only (mw-thesaurus--read-only-keys))
                     minor-mode-overriding-map-alist))
   (setq-local header-line-format '(:eval (mw-thesaurus--header-line)))
   (setq buffer-read-only t))

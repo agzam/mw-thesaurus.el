@@ -570,6 +570,18 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (should (eq response seen))
     (should-not (buffer-live-p response))))
 
+(ert-deftest mw-thesaurus-mode-map-key-of-ones-own-wins-test ()
+  (let ((mw-thesaurus-mode-map (copy-keymap mw-thesaurus-mode-map)))
+    (define-key mw-thesaurus-mode-map (kbd "q") #'delete-window)
+    (define-key mw-thesaurus-mode-map [remap evil-ret] #'ignore)
+    (with-temp-buffer
+      (mw-thesaurus-mode)
+      (should (eq #'delete-window (key-binding "q")))
+      (should (eq #'ignore (command-remapping 'evil-ret)))
+      (should (eq #'mw-thesaurus-back (key-binding "l")))
+      (should (eq #'mw-thesaurus--quit (command-remapping 'evil-record-macro))))
+    (should (eq #'mw-thesaurus--quit (lookup-key mw-thesaurus-read-only-map "q")))))
+
 (ert-deftest mw-thesaurus-mode-ret-looks-up-test ()
   (with-temp-buffer
     (mw-thesaurus-mode)

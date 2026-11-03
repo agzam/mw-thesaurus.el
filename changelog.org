@@ -17,10 +17,10 @@ Changes to the project, following Keep a Changelog conventions.
 
 ** Changed
 - ~C-c C-o~ no longer looks up the word at point, which ~RET~ does; on a pronunciation it still plays it
-- the buffer is named ~* Merriam-Webster *~, as it shows both references; a ~display-buffer-alist~ rule that names ~* Merriam-Webster Thesaurus *~ needs the new name, or ~(setq mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *")~ keeps the old one
+- the buffer is named ~* Merriam-Webster *~, as it shows both references; a window rule that names ~* Merriam-Webster Thesaurus *~, in ~display-buffer-alist~ or a package such as popper, needs the new name, or ~(setq mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *")~ keeps the old one
 - a refused API key also says which variable to set
 - ~RET~, ~l~ and ~q~ in the thesaurus buffer, and evil's ~RET~, ~H~ and ~q~, act only while the page is read-only, as it is after every lookup; after ~C-x C-q~ the page types them and evil's keys work as in any buffer
-- these keys live in the new ~mw-thesaurus-read-only-map~, which outranks ~mw-thesaurus-mode-map~; a single-key binding of your own, such as the readme's Doom remaps, goes there too
+- these keys live in the new ~mw-thesaurus-read-only-map~, which outranks ~mw-thesaurus-mode-map~ but leaves out any key bound there, so a binding of your own in ~mw-thesaurus-mode-map~ works as before
 - ~l~ brings back a page as it first showed; edits made to it after ~C-x C-q~ do not come back
 
 ** Fixed
