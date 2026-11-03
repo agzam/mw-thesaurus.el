@@ -49,13 +49,26 @@
     ;; Evil's state maps outrank this map; a remap reaches past them.
     (define-key map [remap evil-ret] #'mw-thesaurus-lookup-at-point)
     (define-key map [remap evil-record-macro] #'mw-thesaurus--quit)
+    (define-key map [remap evil-window-top] #'mw-thesaurus-back)
     (define-key map (kbd "RET") #'mw-thesaurus-lookup-at-point)
+    (define-key map (kbd "l") #'mw-thesaurus-back)
     (define-key map (kbd "q") #'mw-thesaurus--quit)
     map)
   "Keymap for `mw-thesaurus-mode'.")
 
 (defvar mw-thesaurus-buffer-name "* Merriam-Webster Thesaurus *"
   "Default buffer name for Merriam-Webster Thesaurus.")
+
+(defvar-local mw-thesaurus--word nil
+  "The word whose entries the thesaurus buffer shows.")
+
+(defvar-local mw-thesaurus--history nil
+  "Pages the thesaurus buffer showed before the current one, newest first.
+Each page is a list (WORD TEXT POINT).")
+
+;; Showing a page reruns `mw-thesaurus-mode', which kills buffer-local variables.
+(put 'mw-thesaurus--word 'permanent-local t)
+(put 'mw-thesaurus--history 'permanent-local t)
 
 (define-derived-mode mw-thesaurus-mode org-mode "Merriam-Webster"
   "Major mode for Merriam-Webster thesaurus entries, derived from Org mode.
@@ -183,8 +196,19 @@ Return the body text when it is not JSON, e.g. a key error."
           (json-read-from-string body))
       (json-error (string-trim body)))))
 
-(defun mw-thesaurus--create-buffer (dict-str)
-  "Show DICT-STR, the thesaurus entries in Org format, in the thesaurus buffer."
+(defun mw-thesaurus--show (word text &optional pos)
+  "Show TEXT, the entries for WORD in Org format, in the current buffer.
+Put point at POS, or at the start."
+  (let ((inhibit-read-only t))
+    (erase-buffer)
+    (insert text))
+  (mw-thesaurus-mode)
+  (setq mw-thesaurus--word word)
+  (goto-char (or pos (point-min))))
+
+(defun mw-thesaurus--create-buffer (word dict-str)
+  "Show DICT-STR, the entries for WORD in Org format, in the thesaurus buffer.
+The page it replaces goes to the history of `mw-thesaurus-back'."
   (let ((temp-buf (get-buffer-create mw-thesaurus-buffer-name)))
     ;; The `url-retrieve' callback runs in the response buffer, not the user's.
     (unless (eq 'mw-thesaurus-mode
@@ -195,11 +219,20 @@ Return the body text when it is not JSON, e.g. a key error."
         (switch-to-buffer-other-window temp-buf)))
     (set-buffer temp-buf)
     (with-current-buffer temp-buf
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (insert dict-str))
-      (mw-thesaurus-mode)
-      (goto-char (point-min)))))
+      (when mw-thesaurus--word
+        (push (list mw-thesaurus--word
+                    (buffer-substring-no-properties (point-min) (point-max))
+                    (point))
+              mw-thesaurus--history))
+      (mw-thesaurus--show word dict-str))))
+
+(defun mw-thesaurus-back ()
+  "Show the entries the thesaurus buffer had before the current ones.
+Point returns to where it was, and no request goes to Merriam-Webster."
+  (interactive)
+  (unless mw-thesaurus--history
+    (user-error "No earlier lookup to go back to"))
+  (apply #'mw-thesaurus--show (pop mw-thesaurus--history)))
 
 (defun mw-thesaurus--lookup-word (word &optional missed-word)
   "Look up WORD and show its thesaurus entries.
@@ -221,7 +254,7 @@ no entry, goes to the echo area and prevents a second fallback."
         (err (message "Merriam-Webster request failed: %S" err))
         ((stringp data) (message "Merriam-Webster: %s" (car (split-string data "\n"))))
         (entries
-         (mw-thesaurus--create-buffer (mw-thesaurus--parse entries))
+         (mw-thesaurus--create-buffer word (mw-thesaurus--parse entries))
          (when missed-word
            (message "No Merriam-Webster entry for \"%s\", showing \"%s\""
                     missed-word word)))

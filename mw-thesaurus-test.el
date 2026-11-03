@@ -79,8 +79,8 @@ Only WORDS have entries.  Any other word gets SUGGESTIONS."
   "Call LOOKUP-FN against a fake thesaurus API.
 RESPOND takes the requested word and returns the response body, or an
 error for the callback status.  Return a plist of the request URLs, the
-texts sent to the thesaurus buffer and the echo area messages."
-  (let (urls rendered messages)
+words and texts sent to the thesaurus buffer and the echo area messages."
+  (let (urls words rendered messages)
     (cl-letf (((symbol-function 'url-retrieve)
                (lambda (url callback &rest _)
                  (push url urls)
@@ -92,11 +92,12 @@ texts sent to the thesaurus buffer and the echo area messages."
                        (mw-thesaurus-test--insert-response body))
                      (funcall callback (unless (stringp body) (list :error body)))))))
               ((symbol-function 'mw-thesaurus--create-buffer)
-               (lambda (dict-str) (push dict-str rendered)))
+               (lambda (word dict-str) (push word words) (push dict-str rendered)))
               ((symbol-function 'message)
                (lambda (fmt &rest args) (push (apply #'format fmt args) messages))))
       (funcall lookup-fn))
     (list :urls (nreverse urls)
+          :words (nreverse words)
           :rendered (nreverse rendered)
           :messages (nreverse messages))))
 
@@ -124,6 +125,7 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (should (equal 2 (length (plist-get result :urls))))
     (should (string-prefix-p "* happy ~verb~"
                              (car (plist-get result :rendered))))
+    (should (equal '("happy") (plist-get result :words)))
     (should (equal '("No Merriam-Webster entry for \"hapy\", showing \"happy\"")
                    (plist-get result :messages)))))
 
@@ -304,12 +306,12 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (unwind-protect
         (cl-letf (((symbol-function 'switch-to-buffer-other-window)
                    (lambda (buffer &rest _) (push buffer popped))))
-          (mw-thesaurus--create-buffer "* first ~noun~\n")
+          (mw-thesaurus--create-buffer "first" "* first ~noun~\n")
           (should (equal 1 (length popped)))
           (set-window-buffer nil mw-thesaurus-buffer-name)
           ;; A `url-retrieve' callback runs in a buffer of its own.
           (with-temp-buffer
-            (mw-thesaurus--create-buffer "* second ~noun~\n"))
+            (mw-thesaurus--create-buffer "second" "* second ~noun~\n"))
           (should (equal 1 (length popped)))
           (with-current-buffer mw-thesaurus-buffer-name
             (should (equal "* second ~noun~\n" (buffer-string)))
@@ -340,7 +342,7 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
                    (lambda (buffer &rest _) (push buffer displayed) nil))
                   ((symbol-function 'switch-to-buffer-other-window)
                    (lambda (buffer &rest _) (push buffer popped))))
-          (mw-thesaurus--create-buffer "* happy ~adjective~\n")
+          (mw-thesaurus--create-buffer "happy" "* happy ~adjective~\n")
           (should (equal 1 (length displayed)))
           (should-not popped))
       (kill-buffer mw-thesaurus-buffer-name))))
@@ -354,7 +356,72 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
   (with-temp-buffer
     (mw-thesaurus-mode)
     (should (eq #'mw-thesaurus-lookup-at-point (command-remapping 'evil-ret)))
-    (should (eq #'mw-thesaurus--quit (command-remapping 'evil-record-macro)))))
+    (should (eq #'mw-thesaurus--quit (command-remapping 'evil-record-macro)))
+    (should (eq #'mw-thesaurus-back (command-remapping 'evil-window-top)))))
+
+(ert-deftest mw-thesaurus-mode-l-goes-back-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    (should (eq #'mw-thesaurus-back (key-binding (kbd "l"))))))
+
+(defun mw-thesaurus-test--pages (&rest pages)
+  "Show PAGES, each (WORD TEXT), in a thesaurus buffer that no window shows."
+  (cl-letf (((symbol-function 'switch-to-buffer-other-window) #'ignore))
+    (dolist (page pages)
+      ;; `mw-thesaurus--create-buffer' makes its buffer current.
+      (with-temp-buffer
+        (apply #'mw-thesaurus--create-buffer page)))))
+
+(ert-deftest mw-thesaurus-back-shows-earlier-pages-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+        requests)
+    (unwind-protect
+        (cl-letf (((symbol-function 'url-retrieve)
+                   (lambda (&rest args) (push args requests))))
+          (mw-thesaurus-test--pages '("happy" "* happy ~adjective~\n")
+                                    '("glad" "* glad ~adjective~\n")
+                                    '("joyful" "* joyful ~adjective~\n"))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (mw-thesaurus-back)
+            (should (equal "* glad ~adjective~\n" (buffer-string)))
+            (should (equal "glad" mw-thesaurus--word))
+            (should (eq 'mw-thesaurus-mode major-mode))
+            (should buffer-read-only)
+            (mw-thesaurus-back)
+            (should (equal "* happy ~adjective~\n" (buffer-string)))
+            (should-error (mw-thesaurus-back) :type 'user-error)
+            (should (equal "* happy ~adjective~\n" (buffer-string))))
+          (should-not requests))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-back-restores-point-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (progn
+          (mw-thesaurus-test--pages
+           '("happy" "* happy ~adjective~\n*** Synonyms:\n    glad, joyful\n"))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (goto-char (point-min))
+            (search-forward "joyful")
+            (goto-char (match-beginning 0)))
+          (mw-thesaurus-test--pages '("joyful" "* joyful ~adjective~\n"))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should (bobp))
+            (mw-thesaurus-back)
+            (should (looking-at-p "joyful"))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-back-forgets-a-killed-buffer-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (progn
+          (mw-thesaurus-test--pages '("happy" "* happy ~adjective~\n")
+                                    '("glad" "* glad ~adjective~\n"))
+          (kill-buffer mw-thesaurus-buffer-name)
+          (mw-thesaurus-test--pages '("sad" "* sad ~adjective~\n"))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should-error (mw-thesaurus-back) :type 'user-error)))
+      (kill-buffer mw-thesaurus-buffer-name))))
 
 (ert-deftest mw-thesaurus-mode-derives-from-org-mode-test ()
   (with-temp-buffer

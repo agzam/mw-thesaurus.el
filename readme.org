@@ -66,4 +66,6 @@ If the word has no entry, e.g. because of a typo, the first spelling suggestion 
 * Keys available in mw-thesaurus-mode
 ~RET~ lookup for the word at the cursor (lets you "drill" into definition further)
 
+~l~ (~H~ with evil) go back to the previous lookup, without a new request
+
 ~q~ kill mw-thesaurus buffer and close the window

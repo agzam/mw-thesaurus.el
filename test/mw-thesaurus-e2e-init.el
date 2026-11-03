@@ -58,9 +58,10 @@
             (lambda (word &rest _) (mw-e2e--log 'lookup word))
             '((name . mw-e2e)))
 
+;; The Org text is the last argument in every version of the package.
 (advice-add 'mw-thesaurus--create-buffer :after
-            (lambda (dict-str &rest _)
-              (mw-e2e--log 'render (car (split-string dict-str "\n"))))
+            (lambda (&rest args)
+              (mw-e2e--log 'render (car (split-string (car (last args)) "\n"))))
             '((name . mw-e2e)))
 
 (let ((default command-error-function))
@@ -146,9 +147,10 @@
                     :mw (or (bound-and-true-p mw-thesaurus-mode)
                             (and (derived-mode-p 'mw-thesaurus-mode) t))
                     :read-only buffer-read-only
-                    :point (if-let* ((w (get-buffer-window thesaurus)))
-                               (window-point w)
-                             (point)))))
+                    :point (mw-e2e--point thesaurus)
+                    :after-point (let ((pos (mw-e2e--point thesaurus)))
+                                   (buffer-substring-no-properties
+                                    pos (min (point-max) (+ pos 40)))))))
           :origin (when origin
                     (with-current-buffer origin
                       (list :text-ok (equal (buffer-string) mw-e2e-origin-text)
@@ -164,6 +166,12 @@
                                                                 (buffer-name b)))
                                    (buffer-list))
           :asking (mw-e2e-processes))))
+
+(defun mw-e2e--point (buffer)
+  "Return point in BUFFER, as its window shows it when it has one."
+  (if-let* ((window (get-buffer-window buffer)))
+      (window-point window)
+    (with-current-buffer buffer (point))))
 
 (defun mw-e2e--texts (kind)
   "Return the texts of the events of KIND, oldest first."
