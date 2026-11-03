@@ -13,8 +13,10 @@ Changes to the project, following Keep a Changelog conventions.
 - the faces ~mw-thesaurus-syllables~, ~mw-thesaurus-pronunciation~ and ~mw-thesaurus-example~, gray by default
 - the header line names both references and marks the one shown; ~o~, or a click on the other label, shows the word in the other reference, and ~l~ goes back across both
 - ~RET~ on a dictionary page looks up the word at point in the dictionary
+- ~C-c C-o~, or ~M-x mw-thesaurus-browse~, opens the page shown on merriam-webster.com
 
 ** Changed
+- ~C-c C-o~ no longer looks up the word at point, which ~RET~ does; on a pronunciation it still plays it
 - a refused API key also says which variable to set
 - ~RET~, ~l~ and ~q~ in the thesaurus buffer, and evil's ~RET~, ~H~ and ~q~, act only while the page is read-only, as it is after every lookup; after ~C-x C-q~ the page types them and evil's keys work as in any buffer
 - these keys live in the new ~mw-thesaurus-read-only-map~, which outranks ~mw-thesaurus-mode-map~; a single-key binding of your own, such as the readme's Doom remaps, goes there too

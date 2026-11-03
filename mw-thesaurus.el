@@ -46,7 +46,7 @@
 
 (defvar mw-thesaurus-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map [remap org-open-at-point] #'mw-thesaurus-lookup-at-point)
+    (define-key map [remap org-open-at-point] #'mw-thesaurus-browse)
     map)
   "Keymap for `mw-thesaurus-mode'.
 Single keys go in `mw-thesaurus-read-only-map'.")
@@ -803,6 +803,21 @@ no entry, goes to the echo area and prevents a second fallback."
                                (if (eq mw-thesaurus--reference 'dictionary)
                                    'thesaurus
                                  'dictionary))))
+
+(defun mw-thesaurus-browse ()
+  "Open the page of the thesaurus buffer on merriam-webster.com.
+On a link of the page, such as a pronunciation, follow the link instead."
+  (interactive)
+  (if (and (derived-mode-p 'mw-thesaurus-mode)
+           (org-in-regexp org-link-bracket-re 1))
+      (org-open-at-point)
+    (with-current-buffer (or (get-buffer mw-thesaurus-buffer-name)
+                             (user-error "No Merriam-Webster page to open"))
+      ;; The syllable dots of a word looked up from a dictionary page.
+      (browse-url (format "https://www.merriam-webster.com/%s/%s"
+                          mw-thesaurus--reference
+                          (url-hexify-string
+                           (replace-regexp-in-string "·" "" mw-thesaurus--word)))))))
 
 (defun mw-thesaurus-get-original-word (beginning end)
   "Get a word to look for from the user.

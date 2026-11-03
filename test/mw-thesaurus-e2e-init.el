@@ -73,6 +73,9 @@
             (lambda (word &rest _) (mw-e2e--log 'lookup word))
             '((name . mw-e2e)))
 
+;; A case must not open the user's browser.
+(setq browse-url-browser-function (lambda (url &rest _) (mw-e2e--log 'browse url)))
+
 (advice-add 'make-process :before
             (lambda (&rest args)
               (when (equal "mw-thesaurus-audio" (plist-get args :name))
@@ -207,6 +210,7 @@
                             :mark-active mark-active)))
           :lookups (mw-e2e--texts 'lookup)
           :plays (mw-e2e--texts 'play)
+          :browsed (mw-e2e--texts 'browse)
           :audio (when (file-directory-p (mw-e2e--audio-dir))
                    (mapcar (lambda (file)
                              (cons (file-name-nondirectory file)

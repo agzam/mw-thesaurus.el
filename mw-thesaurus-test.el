@@ -587,11 +587,43 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (should-not (command-remapping 'evil-record-macro))
     (should-not (command-remapping 'evil-window-top))
     (should-not (command-remapping 'evil-open-below))
-    (should (eq #'mw-thesaurus-lookup-at-point (key-binding (kbd "C-c C-o"))))
+    (should (eq #'mw-thesaurus-browse (key-binding (kbd "C-c C-o"))))
     (read-only-mode 1)
     (should (eq #'mw-thesaurus--quit (key-binding "q")))
     (should (eq #'mw-thesaurus-back (command-remapping 'evil-window-top)))
-    (should (eq #'mw-thesaurus-lookup-at-point (key-binding (kbd "C-c C-o"))))))
+    (should (eq #'mw-thesaurus-browse (key-binding (kbd "C-c C-o"))))))
+
+(ert-deftest mw-thesaurus-browse-opens-the-page-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+        urls)
+    (unwind-protect
+        (cl-letf (((symbol-function 'browse-url) (lambda (url &rest _) (push url urls))))
+          (dolist (page '(("give up" "* give up ~verb~\n" dictionary)
+                          ("happy" "* happy ~adjective~\n" thesaurus)
+                          ("hap·py" "* happy ~adjective~\n" dictionary)))
+            (mw-thesaurus-test--pages page)
+            ;; From any buffer, as with M-x.
+            (with-temp-buffer (mw-thesaurus-browse)))
+          (should (equal '("https://www.merriam-webster.com/dictionary/give%20up"
+                           "https://www.merriam-webster.com/thesaurus/happy"
+                           "https://www.merriam-webster.com/dictionary/happy")
+                         (nreverse urls))))
+      (kill-buffer mw-thesaurus-buffer-name))
+    (should-error (mw-thesaurus-browse) :type 'user-error)))
+
+(ert-deftest mw-thesaurus-browse-follows-a-link-test ()
+  (let (played urls)
+    (cl-letf (((symbol-function 'mw-thesaurus--play) (lambda (audio &rest _) (push audio played)))
+              ((symbol-function 'browse-url) (lambda (url &rest _) (push url urls))))
+      (with-temp-buffer
+        (let ((inhibit-read-only t))
+          (insert "* decline ~verb~\n  de·cline [[mw-thesaurus-audio:declin03][di-ˈklīn]] dē-\n"))
+        (mw-thesaurus-mode)
+        (goto-char (point-min))
+        (search-forward "klīn")
+        (call-interactively (key-binding (kbd "C-c C-o")))))
+    (should (equal '("declin03") played))
+    (should-not urls)))
 
 (ert-deftest mw-thesaurus-mode-o-switches-reference-test ()
   (with-temp-buffer
