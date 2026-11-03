@@ -870,7 +870,8 @@ Otherwise, user must provide additional information."
 REFERENCE is `thesaurus' or `dictionary'."
   (cond ((use-region-p)
          (mw-thesaurus-lookup (region-beginning) (region-end) reference))
-        ((thing-at-point 'word)
+        ;; On an empty line Emacs 27 and 28 give its newline as the word.
+        ((not (string-blank-p (or (thing-at-point 'word t) "")))
          (mw-thesaurus-lookup-at-point (point) reference))
         (t (mw-thesaurus-lookup nil nil reference))))
 

@@ -501,6 +501,16 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (should (equal '("Merriam-Webster dictionary: Invalid API key. Not subscribed for this reference.  Set `mw-thesaurus-dictionary-api-key' to a Collegiate Dictionary key from https://dictionaryapi.com")
                    (plist-get result :messages)))))
 
+(ert-deftest mw-thesaurus-lookup-dwim-prompts-on-an-empty-line-test ()
+  (with-temp-buffer
+    (insert "\n")
+    (goto-char 1)
+    ;; What Emacs 27 and 28 return on an empty line.
+    (cl-letf (((symbol-function 'thing-at-point) (lambda (&rest _) "\n"))
+              ((symbol-function 'read-string) (lambda (&rest _) "happy")))
+      (let ((result (mw-thesaurus-test--lookup '("happy") nil #'mw-thesaurus-lookup-dwim)))
+        (should (equal '("happy") (plist-get result :words)))))))
+
 (ert-deftest mw-thesaurus-lookup-at-point-follows-the-page-test ()
   (with-temp-buffer
     (insert "to slope downward")

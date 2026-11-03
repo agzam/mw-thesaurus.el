@@ -25,6 +25,7 @@ Changes to the project, following Keep a Changelog conventions.
 
 ** Fixed
 - with ~org-indent-mode~ on, a page is no longer indented twice: it leaves the indentation of its body to ~org-indent-mode~
+- in Emacs 27 and 28, ~mw-thesaurus-lookup-dwim~ on an empty line asks for a word instead of looking up the line break
 
 * [1.4.0] - 2026-11-02
 
