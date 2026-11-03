@@ -11,15 +11,117 @@
 (require 'seq)
 (require 'subr-x)
 
-(setq inhibit-startup-screen t
-      ring-bell-function #'ignore
-      package-user-dir (getenv "MW_E2E_ELPA"))
-(package-initialize)
-(add-to-list 'load-path (getenv "MW_E2E_SOURCE"))
-(require 'mw-thesaurus)
-(when (equal (getenv "MW_E2E_PROFILE") "evil")
+(defun mw-e2e--env (name)
+  "Return the environment variable NAME, or nil when it is unset or empty."
+  (let ((value (getenv name)))
+    (unless (equal value "") value)))
+
+(defun mw-e2e--load-dir (source)
+  "Return the directory to load mw-thesaurus from: SOURCE, or a compiled copy.
+MW_E2E_COMPILE, byte or native, compiles a copy, so the checkout gets no .elc."
+  (if-let* ((how (mw-e2e--env "MW_E2E_COMPILE")))
+      (let* ((dir (file-name-as-directory
+                   (expand-file-name (concat "compiled/" (getenv "MW_E2E_SERVER"))
+                                     (getenv "MW_E2E_DIR"))))
+             (file (expand-file-name "mw-thesaurus.el" dir)))
+        (make-directory dir t)
+        (copy-file (expand-file-name "mw-thesaurus.el" source) file t)
+        (if (equal how "native")
+            (load (native-compile file) nil t)
+          (byte-compile-file file))
+        dir)
+    source))
+
+(defun mw-e2e--evil ()
+  "Turn on evil."
   (require 'evil)
   (evil-mode 1))
+
+(defun mw-e2e--right-window-rule ()
+  "Show the buffer on the right, as the readme's `use-package' example does."
+  (add-to-list 'display-buffer-alist
+               `(,mw-thesaurus-buffer-name
+                 (display-buffer-reuse-window display-buffer-in-direction)
+                 (direction . right) (window . root) (window-width . 0.3))))
+
+(defun mw-e2e--profile (profile)
+  "Configure this Emacs as PROFILE, after mw-thesaurus loads.
+Each profile copies the readme or a public config that sets up mw-thesaurus."
+  (pcase profile
+    ("evil" (mw-e2e--evil))
+    ("readme"
+     (add-hook 'mw-thesaurus-mode-hook #'variable-pitch-mode)
+     (mw-e2e--right-window-rule))
+    ;; Doom's RET in Org runs +org/dwim-at-point; the 1.4.0 readme remaps it.
+    ("doom"
+     (mw-e2e--evil)
+     (require 'evil-org)
+     (add-hook 'org-mode-hook #'evil-org-mode)
+     (defalias '+org/dwim-at-point
+       (lambda ()
+         (interactive)
+         (if (org-in-regexp org-link-bracket-re 1)
+             (org-open-at-point)
+           (message "+org/dwim-at-point")))
+       "Doom's RET in Org buffers, as far as a thesaurus page needs it.")
+     (evil-define-key '(normal motion) evil-org-mode-map (kbd "RET") #'+org/dwim-at-point)
+     (define-key mw-thesaurus-mode-map [remap evil-record-macro] #'mw-thesaurus--quit)
+     (define-key mw-thesaurus-mode-map [remap +org/dwim-at-point] #'mw-thesaurus-lookup-at-point))
+    ;; stubillwhite/.emacs.d, lisp/package-config/sbw-configure-mw-thesaurus.el
+    ("stubillwhite"
+     (advice-add 'mw-thesaurus-lookup-at-point :around
+                 (lambda (orig &rest args)
+                   (let ((split-height-threshold nil)
+                         (split-width-threshold 0))
+                     (apply orig args))))
+     (define-key mw-thesaurus-mode-map (kbd "q") 'delete-window))
+    ;; a3madkour, M1ndo, fet64, jakebox and MooersLab dotfiles.
+    ("evil-local-q"
+     (mw-e2e--evil)
+     (add-hook 'mw-thesaurus-mode-hook
+               (lambda ()
+                 (define-key evil-normal-state-local-map (kbd "q") 'mw-thesaurus--quit))))
+    ;; younger-1/emacs, lisp/init-tool.el
+    ("younger"
+     (mw-e2e--evil)
+     (define-key mw-thesaurus-mode-map [remap evil-ret] #'mw-thesaurus-lookup-at-point)
+     (define-key mw-thesaurus-mode-map [remap evil-record-macro] #'mw-thesaurus--quit)
+     (add-hook 'mw-thesaurus-mode-hook #'variable-pitch-mode)
+     (mw-e2e--right-window-rule))
+    ;; mpereira/.emacs.d, init.el
+    ("rule-literal"
+     (setq-default display-buffer-alist
+                   '(("\\* Merriam-Webster Thesaurus \\*" (display-buffer-below-selected)))))
+    ;; Jonghyun-Yun/doom-emacs-private's popup rule, as a display rule.
+    ("rule-prefix"
+     (add-to-list 'display-buffer-alist
+                  '("^\\* Merriam-Webster" (display-buffer-in-side-window)
+                    (side . right) (window-width . 50))))
+    ;; garid3000/My-Emacs-Init, init.org
+    ("popper"
+     (require 'popper)
+     (setq popper-reference-buffers '("\\* Merriam-Webster Thesaurus \\*"))
+     (popper-mode 1))
+    ("org"
+     (setq org-link-descriptive nil
+           org-startup-folded t
+           org-pretty-entities t)
+     ;; Jonghyun-Yun/doom-emacs-private's +write/buffer-face-mode-dict.
+     (add-hook 'mw-thesaurus-mode-hook
+               (lambda ()
+                 (setq buffer-face-mode-face '(:height 1.1))
+                 (buffer-face-mode)
+                 (setq-local line-spacing 0.5))))))
+
+(setq inhibit-startup-screen t
+      ring-bell-function #'ignore
+      ;; Such warnings would open a window in the middle of a case.
+      native-comp-async-report-warnings-errors 'silent
+      package-user-dir (getenv "MW_E2E_ELPA"))
+(package-initialize)
+(add-to-list 'load-path (mw-e2e--load-dir (getenv "MW_E2E_SOURCE")))
+(require 'mw-thesaurus)
+(mw-e2e--profile (getenv "MW_E2E_PROFILE"))
 
 (defvar mw-e2e-events nil
   "What the current case did, newest first: (TIME KIND TEXT).")
@@ -75,6 +177,17 @@
 
 ;; A case must not open the user's browser.
 (setq browse-url-browser-function (lambda (url &rest _) (mw-e2e--log 'browse url)))
+
+(advice-add 'display-warning :before
+            (lambda (type message &rest _)
+              ;; Another package's native compilation warns at its own pace.
+              (unless (memq (if (consp type) (car type) type) '(comp native-compiler))
+                (mw-e2e--log 'warning (format "%s: %s" type message))))
+            '((name . mw-e2e)))
+
+(load (expand-file-name "mw-thesaurus-e2e-cache.el" (file-name-directory load-file-name))
+      nil t)
+(setq mw-e2e-cache-log #'mw-e2e--log)
 
 (advice-add 'make-process :before
             (lambda (&rest args)
@@ -191,9 +304,21 @@
                               (substring-no-properties line))
                     :current (when-let* ((line (mw-e2e--header-line)))
                                (seq-find (lambda (label)
-                                           (when-let* ((at (string-search label line)))
+                                           (when-let* ((at (mw-e2e--search label line)))
                                              (eq 'bold (get-text-property at 'face line))))
                                          '("Thesaurus" "Dictionary")))
+                    :hidden (save-excursion
+                              (goto-char (point-min))
+                              (let ((n 0))
+                                (while (not (eobp))
+                                  (when (invisible-p (point)) (setq n (1+ n)))
+                                  (forward-line 1))
+                                n))
+                    :rule (car (seq-find (lambda (entry)
+                                           (and (stringp (car entry))
+                                                (string-match-p (car entry) (buffer-name))))
+                                         display-buffer-alist))
+                    :popup (bound-and-true-p popper-popup-status)
                     :mode major-mode
                     :org (and (derived-mode-p 'org-mode) t)
                     :mw (or (bound-and-true-p mw-thesaurus-mode)
@@ -208,7 +333,12 @@
                       (list :text-ok (equal (buffer-string) mw-e2e-origin-text)
                             :point (point)
                             :mark-active mark-active)))
+          :layout (mapcar (lambda (w) (cons (buffer-name (window-buffer w)) (window-edges w)))
+                          (window-list nil 'never))
           :lookups (mw-e2e--texts 'lookup)
+          :fetches (mw-e2e--texts 'fetch)
+          :cached (mw-e2e--texts 'cached)
+          :warnings (mw-e2e--texts 'warning)
           :plays (mw-e2e--texts 'play)
           :browsed (mw-e2e--texts 'browse)
           :audio (when (file-directory-p (mw-e2e--audio-dir))
@@ -242,6 +372,18 @@
                           (nthcdr 2 args))))
               '((name . mw-e2e-slow))))
 
+(defvar mw-e2e--own-q nil
+  "What q ran in `mw-thesaurus-mode-map' before a case bound its own.")
+
+(defun mw-e2e-own-q (on)
+  "Bind q in `mw-thesaurus-mode-map' to `delete-window' when ON, else undo it.
+Under evil the key is the remap of `evil-record-macro', as configs do it."
+  (let ((key (if (bound-and-true-p evil-mode) [remap evil-record-macro] "q")))
+    (if on
+        (progn (setq mw-e2e--own-q (lookup-key mw-thesaurus-mode-map key))
+               (define-key mw-thesaurus-mode-map key #'delete-window))
+      (define-key mw-thesaurus-mode-map key mw-e2e--own-q))))
+
 (defun mw-e2e-goto-speaker (n)
   "Put point on the Nth speaker of the thesaurus page, in its window."
   (with-selected-window (get-buffer-window mw-thesaurus-buffer-name)
@@ -258,7 +400,7 @@
 (defun mw-e2e-header-position (label)
   "Return the screen column and row, from 1, of LABEL in the header line."
   (when-let* ((line (mw-e2e--header-line))
-              (at (string-search label line))
+              (at (mw-e2e--search label line))
               (window (get-buffer-window mw-thesaurus-buffer-name)))
     (cons (+ 1 (window-left-column window) at)
           (+ 1 (window-top-line window)))))
@@ -268,6 +410,10 @@
   (if-let* ((window (get-buffer-window buffer)))
       (window-point window)
     (with-current-buffer buffer (point))))
+
+(defun mw-e2e--search (needle haystack)
+  "Return where NEEDLE starts in HAYSTACK, or nil; `string-search' needs Emacs 28."
+  (string-match-p (regexp-quote needle) haystack))
 
 (defun mw-e2e--texts (kind)
   "Return the texts of the events of KIND, oldest first."

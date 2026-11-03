@@ -21,12 +21,22 @@
   (file-name-directory (directory-file-name mw-e2e--test-dir))
   "The checkout.")
 
-(defconst mw-e2e--dir (file-name-as-directory (expand-file-name ".e2e" mw-e2e--root))
-  "Where a run keeps its packages, sockets and profiles.")
+(defconst mw-e2e--dir
+  (file-name-as-directory (or (getenv "MW_E2E_DIR") (expand-file-name ".e2e" mw-e2e--root)))
+  "Where a run keeps its packages, sockets and profiles, MW_E2E_DIR or .e2e.")
 
 (defconst mw-e2e--profiles
   (split-string (or (getenv "MW_E2E_PROFILES") "vanilla evil") "[ ,]+" t)
-  "The profiles of this run.")
+  "The profiles of this run; test/mw-thesaurus-e2e-init.el defines them.")
+
+(defconst mw-e2e--evil-profiles '("evil" "doom" "evil-local-q" "younger")
+  "The profiles that turn on evil.")
+
+(defconst mw-e2e--window-cases
+  '("dwim, word middle" "dictionary dwim" "switch with o" "back across references"
+    "drill down with RET" "q quits" "reopen after q" "q on a dictionary page"
+    "frame already split" "dictionary, frame already split" "two lookups at once")
+  "The cases of the profiles that only add a window rule.")
 
 (defconst mw-e2e--only (getenv "MW_E2E_CASES")
   "A regexp of the case labels to run, or nil for all.")
@@ -376,6 +386,10 @@ A case that expects a page expects a dictionary page.  See
               (eval (run-at-time 0 nil #'mw-thesaurus--lookup-word "happy"))
               (wait-done) (type "ignore") (keys "Enter") (pause 1))
       :expect (:shows "^\\* happy "))
+     ("q of one's own in the mode map" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((eval (mw-e2e-own-q t)) (cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (keys "q") (pause 1) (eval (mw-e2e-own-q nil)))
+      :expect (:shows "^\\* happy " :windows 1))
      ("user key over a default one" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((eval (if (fboundp 'evil-define-key)
                         (evil-define-key 'normal mw-thesaurus-mode-map "x" #'mw-thesaurus--quit)
@@ -571,12 +585,20 @@ Steps are (cmd NAME), (keys KEY...) in tmux names, (type TEXT),
 \(click LABEL) in the header line, (eval FORM), (wait-prompt),
 \(wait-done [SECONDS QUIET]), (wait-for FORM [SECONDS]), (pause SECONDS).")
 
+(defun mw-e2e--evil-p (profile)
+  "Non-nil when PROFILE turns on evil."
+  (member profile mw-e2e--evil-profiles))
+
 (defun mw-e2e--selected-cases (profile)
-  "Return the cases PROFILE runs: all for vanilla, the flow cases for evil."
+  "Return the cases PROFILE runs.
+Vanilla runs all, a profile that only adds a window rule a few, and the
+others the flow cases."
   (seq-filter (lambda (case)
                 (and (or (null mw-e2e--only) (string-match-p mw-e2e--only (car case)))
-                     (or (equal profile "vanilla")
-                         (memq 'flow (plist-get (cdr case) :tags)))))
+                     (cond ((equal profile "vanilla"))
+                           ((member profile '("rule-literal" "rule-prefix" "popper"))
+                            (member (car case) mw-e2e--window-cases))
+                           (t (memq 'flow (plist-get (cdr case) :tags))))))
               mw-e2e--cases))
 
 ;;; Processes
@@ -601,11 +623,11 @@ Steps are (cmd NAME), (keys KEY...) in tmux names, (type TEXT),
       (server-eval-at name form))))
 
 (defun mw-e2e--packages ()
-  "Install what origin/master and the evil profile need into the run's ELPA."
+  "Install what origin/master and the profiles need into the run's ELPA."
   (setq package-user-dir (expand-file-name "elpa" mw-e2e--dir))
   (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/"))
   (package-initialize)
-  (when-let* ((missing (seq-remove #'package-installed-p '(request dash evil))))
+  (when-let* ((missing (seq-remove #'package-installed-p '(request dash evil evil-org popper))))
     (package-refresh-contents)
     (mapc #'package-install missing)))
 
@@ -640,15 +662,21 @@ Return what it reports about itself."
            (concat "PATH=" (getenv "PATH"))
            (concat "TMPDIR=" (or (getenv "TMPDIR") "/tmp"))
            (concat "USER=" (or (getenv "USER") "e2e"))
-           "LANG=en_US.UTF-8" "TERM=screen-256color"
+           (concat "LANG=" (or (getenv "MW_E2E_LANG") "en_US.UTF-8"))
+           "TERM=screen-256color"
            (concat "MW_E2E_ELPA=" (expand-file-name "elpa" mw-e2e--dir))
            (concat "MW_E2E_SOURCE=" source)
            (concat "MW_E2E_PROFILE=" profile)
            (concat "MW_E2E_SOCKET_DIR=" sockets)
            (concat "MW_E2E_SERVER=" name)
-           (list (expand-file-name invocation-name invocation-directory)
-                 "-nw" "-q" "--init-directory" init-dir
-                 "-l" (expand-file-name "mw-thesaurus-e2e-init.el" mw-e2e--test-dir)))
+           (concat "MW_E2E_DIR=" mw-e2e--dir)
+           (concat "MW_E2E_CACHE=" (or (getenv "MW_E2E_CACHE") ""))
+           (concat "MW_E2E_COMPILE=" (or (getenv "MW_E2E_COMPILE") ""))
+           `(,(expand-file-name invocation-name invocation-directory)
+             "-nw" "-q"
+             ;; HOME is the run's own, so Emacs 27 and 28 stay sandboxed without it.
+             ,@(when (<= 29 emacs-major-version) (list "--init-directory" init-dir))
+             "-l" ,(expand-file-name "mw-thesaurus-e2e-init.el" mw-e2e--test-dir)))
     (let ((end (+ (float-time) 30)))
       (while (and (not (file-exists-p (expand-file-name name sockets)))
                   (< (float-time) end))
@@ -691,9 +719,9 @@ Return what it reports about itself."
     (`(keys . ,keys) (apply #'mw-e2e--keys name keys) nil)
     (`(type ,text) (mw-e2e--type name text) nil)
     (`(,(or 'region 'profile-keys) ,vanilla ,evil)
-     (apply #'mw-e2e--keys name (if (equal profile "evil") evil vanilla)) nil)
+     (apply #'mw-e2e--keys name (if (mw-e2e--evil-p profile) evil vanilla)) nil)
     (`(search ,text)
-     (if (equal profile "evil")
+     (if (mw-e2e--evil-p profile)
          (progn (mw-e2e--keys name "/") (mw-e2e--type name text) (mw-e2e--keys name "Enter"))
        (mw-e2e--keys name "C-s") (mw-e2e--type name text) (mw-e2e--keys name "Enter" "M-b"))
      (sleep-for 0.3) nil)
@@ -723,7 +751,36 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
       (ignore-errors (mw-e2e--keys name "C-g"))
       (sleep-for 0.3))))
 
+(defun mw-e2e--save-screen (name label)
+  "Keep the screen of the Emacs NAME after the case LABEL under screens/ of the run."
+  (let ((file (expand-file-name
+               (format "screens/%s/%s.txt" name
+                       (replace-regexp-in-string "[^[:alnum:]]+" "-" label))
+               mw-e2e--dir))
+        (coding-system-for-write 'utf-8))
+    (make-directory (file-name-directory file) t)
+    (write-region (or (ignore-errors
+                        (mw-e2e--tmux "capture-pane" "-p" "-t" (concat "=" name ":")))
+                      "")
+                  nil file nil 'silent)))
+
+(defun mw-e2e--missing-command (name case)
+  "Return the first command CASE types that the Emacs NAME lacks, or nil."
+  (seq-some (lambda (step)
+              (pcase step
+                (`(cmd ,command)
+                 (unless (mw-e2e--eval name `(fboundp ',(intern command)))
+                   command))))
+            (plist-get (cdr case) :steps)))
+
 (defun mw-e2e--run-case (name profile case)
+  "Run CASE in the Emacs NAME of PROFILE; return (SECONDS NOTES STATE).
+A case typing a command the package lacks fails at once, not after a timeout."
+  (if-let* ((missing (mw-e2e--missing-command name case)))
+      (list 0 (list (format "no command %s" missing)) nil)
+    (mw-e2e--run-case-1 name profile case)))
+
+(defun mw-e2e--run-case-1 (name profile case)
   "Run CASE in the Emacs NAME of PROFILE; return (SECONDS NOTES STATE)."
   (let ((start (float-time))
         notes)
@@ -739,6 +796,7 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
     (let ((state (condition-case err (mw-e2e--eval name '(mw-e2e-state))
                    (error (push (format "no state: %s" (error-message-string err)) notes)
                           nil))))
+      (mw-e2e--save-screen name (car case))
       ;; A prompt or a pending key sequence left behind would eat the next case.
       (ignore-errors (mw-e2e--keys name "C-g"))
       (mw-e2e--close-prompts name)
@@ -766,10 +824,56 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
                      (format "echo %S" (string-join outcomes " | ")))
                    (when-let* ((errors (plist-get state :errors)))
                      (format "error %S" (string-join errors " | ")))
+                   (when-let* ((warnings (plist-get state :warnings)))
+                     (format "warning %S" (string-join warnings " | ")))
+                   (when-let* ((n (and thesaurus (plist-get thesaurus :hidden)))
+                               ((< 0 n)))
+                     (format "%d lines hidden" n))
+                   (when-let* ((rule (and thesaurus (plist-get thesaurus :rule))))
+                     (format "rule %S" rule))
+                   (when-let* ((popup (and thesaurus (plist-get thesaurus :popup))))
+                     (format "popup %s" popup))
                    (format "lookups %S" (plist-get state :lookups))
-                   (format "windows %d, selected %s" (length (plist-get state :windows))
+                   (format "windows %s; selected %s"
+                           (mapconcat (lambda (w) (format "%s %S" (car w) (cdr w)))
+                                      (plist-get state :layout) ", ")
                            (plist-get state :selected))))
        "; "))))
+
+(defun mw-e2e--normalize (text)
+  "Return TEXT without what every branch page adds to an origin/master one.
+That is the buffer's new name and the speaker after each thesaurus heading."
+  (replace-regexp-in-string
+   "\\* Merriam-Webster \\*" "* Merriam-Webster Thesaurus *"
+   (replace-regexp-in-string " \\[\\[mw-thesaurus-entry-audio:[^]]*\\]\\[🔊\\]\\]" "" text t t)
+   t t))
+
+(defun mw-e2e--page-diff (main branch)
+  "Return how the thesaurus page in BRANCH differs from the one in MAIN, or nil.
+MAIN and BRANCH are states; only pages with the same head line compare."
+  (let ((a (plist-get main :thesaurus))
+        (b (plist-get branch :thesaurus)))
+    (when (and a b
+               (not (eq 'dictionary (plist-get b :reference)))
+               (equal (mw-e2e--normalize (plist-get a :head))
+                      (mw-e2e--normalize (plist-get b :head))))
+      (let ((old (mw-e2e--normalize (plist-get a :text)))
+            (new (mw-e2e--normalize (plist-get b :text))))
+        (unless (equal old new)
+          (let ((old-file (make-temp-file "mw-e2e-main"))
+                (new-file (make-temp-file "mw-e2e-branch"))
+                (coding-system-for-write 'utf-8)
+                (coding-system-for-read 'utf-8))
+            (unwind-protect
+                (progn
+                  (write-region old nil old-file nil 'silent)
+                  (write-region new nil new-file nil 'silent)
+                  (with-temp-buffer
+                    (call-process "diff" nil t nil "-u" "--label" "main" "--label" "branch"
+                                  old-file new-file)
+                    (buffer-string)))
+              (delete-file old-file)
+              (delete-file new-file))))))))
 
 (defun mw-e2e--failures (state expect)
   "Return what in STATE breaks the checks every case has, or EXPECT."
@@ -787,6 +891,8 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
       (when (plist-get state :minibuffer) (fail "a prompt is left open"))
       (when (and (plist-get state :errors) (not (plist-get expect :error)))
         (fail "unexpected error: %s" (string-join (plist-get state :errors) " | ")))
+      (when-let* ((warnings (plist-get state :warnings)))
+        (fail "warning: %s" (string-join warnings " | ")))
       (when-let* ((re (plist-get expect :error)))
         (unless (seq-some (lambda (e) (string-match-p re e)) (plist-get state :errors))
           (fail "no error matching %S" re)))
@@ -850,7 +956,8 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
 
 ;;; Runs
 
-(defvar mw-e2e--totals (list :cases 0 :failures 0 :same 0 :fixed 0 :diffs 0 :requests 0)
+(defvar mw-e2e--totals (list :cases 0 :failures 0 :same 0 :fixed 0 :diffs 0 :texts 0
+                              :requests 0 :fetches 0 :cached 0)
   "What the run counted.")
 
 (defun mw-e2e--count (key &optional n)
@@ -865,16 +972,19 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
              do (princ (format "start %s: %S\n" name (mw-e2e--start name profile source))))
     (unwind-protect
         (dolist (case (mw-e2e--selected-cases profile))
-          (let (outcomes failures)
+          (let (outcomes failures states)
             (cl-loop
              for name in names for flavor in mw-e2e--flavors
              do (pcase-let* ((`(,seconds ,notes ,state) (mw-e2e--run-case name profile case))
                              (outcome (mw-e2e--outcome state)))
                   (push outcome outcomes)
+                  (push state states)
                   (push (append notes (mw-e2e--failures state (plist-get (cdr case) :expect)))
                         failures)
                   (mw-e2e--count :requests (length (plist-get state :lookups)))
-                  (princ (format "%-7s %-6s %-30s %2ss => %s\n" profile flavor (car case)
+                  (mw-e2e--count :fetches (length (plist-get state :fetches)))
+                  (mw-e2e--count :cached (length (plist-get state :cached)))
+                  (princ (format "%-12s %-6s %-30s %2ss => %s\n" profile flavor (car case)
                                  seconds outcome))))
             (mw-e2e--count :cases)
             ;; FAIL is new in the branch, SAME fails in both, FIXED only in main.
@@ -890,9 +1000,15 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
               (dolist (failure main)
                 (unless (member failure branch)
                   (mw-e2e--count :fixed) (princ (format "  FIXED %s\n" failure)))))
-            (unless (equal (car outcomes) (cadr outcomes))
+            (unless (equal (mw-e2e--normalize (car outcomes))
+                           (mw-e2e--normalize (cadr outcomes)))
               (mw-e2e--count :diffs)
-              (princ (format "  DIFF %s\n" (car case))))))
+              (princ (format "  DIFF %s\n" (car case))))
+            (when-let* ((diff (mw-e2e--page-diff (cadr states) (car states))))
+              (mw-e2e--count :texts)
+              (princ (format "  TEXT %s\n" (car case)))
+              (dolist (line (seq-take (split-string diff "\n" t) 60))
+                (princ (format "    %s\n" line))))))
       (cl-loop for name in names
                do (princ (format "%s asks before exit about: %S\n" name
                                  (ignore-errors (mw-e2e--eval name '(mw-e2e-processes))))))
@@ -909,10 +1025,13 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
       (dolist (profile mw-e2e--profiles)
         (mw-e2e--profile profile))
     (ignore-errors (mw-e2e--tmux "kill-server")))
-  (princ (format "SUMMARY %d cases: %d FAIL, %d SAME, %d FIXED, %d DIFF, %d requests\n"
+  (princ (format (concat "SUMMARY %d cases: %d FAIL, %d SAME, %d FIXED, %d DIFF, %d TEXT; "
+                         "%d lookups, %d API requests, %d cached answers\n")
                  (plist-get mw-e2e--totals :cases) (plist-get mw-e2e--totals :failures)
                  (plist-get mw-e2e--totals :same) (plist-get mw-e2e--totals :fixed)
-                 (plist-get mw-e2e--totals :diffs) (plist-get mw-e2e--totals :requests)))
+                 (plist-get mw-e2e--totals :diffs) (plist-get mw-e2e--totals :texts)
+                 (plist-get mw-e2e--totals :requests) (plist-get mw-e2e--totals :fetches)
+                 (plist-get mw-e2e--totals :cached)))
   (kill-emacs (if (zerop (plist-get mw-e2e--totals :failures)) 0 1)))
 
 (provide 'mw-thesaurus-e2e)
