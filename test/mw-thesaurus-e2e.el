@@ -111,6 +111,25 @@ say what the thesaurus shows passes whatever entries come back."
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
               (profile-keys ("l") ("H")) (pause 1))
       :expect (:shows "^\\* happy " :error "No earlier lookup" :lookups 1))
+     ("dictionary dwim" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done))
+      :expect (:shows "^\\* happy " :reference dictionary
+               :header "\\` Thesaurus   Dictionary\\'" :windows 2 :lookups 1))
+     ("dictionary prompt, typo" :text "\n" :point 1 :tags (flow)
+      :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt)
+              (type "declne") (keys "Enter") (wait-done))
+      :expect (:shows "^\\* decline " :reference dictionary :echo "showing \"decline\""))
+     ("switch with o" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "o") (wait-done 6))
+      :expect (:shows "^\\* happy " :reference dictionary :windows 2 :lookups 2))
+     ("back across references" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "o") (wait-done 6)
+              (profile-keys ("l") ("H")) (pause 1))
+      :expect (:shows "^\\* happy " :reference thesaurus :windows 2 :lookups 2))
+     ("drill down in the dictionary" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)
+              (search "fortune") (keys "Enter") (wait-done 6))
+      :expect (:shows "^\\* fortune " :reference dictionary :lookups 2))
      ("writable page types the keys" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
               (search "glad") (keys "Enter") (wait-done 6)
@@ -407,8 +426,13 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
       (string-join
        (delq nil
              (list (if thesaurus
-                       (format "shows %S (%d entries)" (plist-get thesaurus :head)
-                               (plist-get thesaurus :entries))
+                       ;; Only the dictionary is named, so thesaurus pages read
+                       ;; the same in origin/master, which has no references.
+                       (format "shows %S (%d entries%s)" (plist-get thesaurus :head)
+                               (plist-get thesaurus :entries)
+                               (if (eq 'dictionary (plist-get thesaurus :reference))
+                                   ", dictionary"
+                                 ""))
                      "no thesaurus")
                    (when-let* ((outcomes (plist-get state :outcomes)))
                      (format "echo %S" (string-join outcomes " | ")))
@@ -441,6 +465,12 @@ A C-g reaches a prompt only from its window, which a lookup may have left."
       (when-let* ((re (plist-get expect :shows)))
         (unless (and thesaurus (string-match-p re (plist-get thesaurus :head)))
           (fail "expected the thesaurus to show %S" re)))
+      (when-let* ((reference (plist-get expect :reference)))
+        (unless (and thesaurus (eq reference (plist-get thesaurus :reference)))
+          (fail "expected the %s" reference)))
+      (when-let* ((re (plist-get expect :header)))
+        (unless (and thesaurus (string-match-p re (or (plist-get thesaurus :header) "")))
+          (fail "expected a header line matching %S" re)))
       (when-let* ((re (plist-get expect :at)))
         (unless (and thesaurus
                      (string-match-p (concat "\\`" re) (plist-get thesaurus :after-point)))

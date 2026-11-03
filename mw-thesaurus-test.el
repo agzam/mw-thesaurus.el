@@ -55,6 +55,124 @@
   (should (equal "lacking strength"
                  (mw-thesaurus--format-text "{bc}lacking strength"))))
 
+(defconst mw-thesaurus-test--dictionary-words
+  '("decline" "set" "conception" "cowl" "happy" "both" "tearaway" "borstal" "went")
+  "Words with a Collegiate Dictionary response in ./assets.")
+
+(defun mw-thesaurus-test--dictionary (word)
+  "Return the Org text of the dictionary response for WORD in ./assets.
+The zero-width spaces around italics are left out."
+  (replace-regexp-in-string
+   "\u200b" ""
+   (mw-thesaurus--dictionary-parse
+    (mw-thesaurus-test--read
+     (mw-thesaurus-test--asset (format "dictionary-%s.json" word))))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-test ()
+  (should (equal (mw-thesaurus-test--asset "dictionary-decline.org")
+                 (mw-thesaurus-test--dictionary "decline"))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-leaves-no-markup-test ()
+  (dolist (word mw-thesaurus-test--dictionary-words)
+    (let ((org (mw-thesaurus-test--dictionary word)))
+      (should (string-prefix-p "* " org))
+      (should-not (string-match-p "[{}]" org))
+      (should-not (string-match-p "^\\*+ *$" org))
+      ;; Org shows a line that starts with a colon as fixed-width text.
+      (should-not (string-match-p "^ *:" org)))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-sense-groups-test ()
+  (let ((org (mw-thesaurus-test--dictionary "conception")))
+    (should (string-match-p
+             (concat "^\\*\\* 1 a (1) : the process of becoming pregnant involving"
+                     " fertilization or implantation or both\n"
+                     "\\*\\* (2) : embryo, fetus\n"
+                     "\\*\\* b : beginning\n")
+             org))
+    (should (string-match-p
+             (concat "^   Etymology: Middle English /concepcioun/, from Anglo-French"
+                     " /concepcion/, from Latin /conception-, conceptio/, from"
+                     " /concipere/ — see concept entry 1\n"
+                     "   First known use: 14th century\n")
+             org))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-senses-without-numbers-test ()
+  (should (string-match-p
+           (concat "^\\* cowl ~verb~\n  cowled; cowling; cowls\n"
+                   "\\*\\* transitive verb\n\\*\\*\\* to cover with or as if with a cowl\n"
+                   "\\*\\* Word history\n   First known use: 1536\n")
+           (mw-thesaurus-test--dictionary "cowl")))
+  (should (string-match-p "^\\*\\* c : cowling$" (mw-thesaurus-test--dictionary "cowl")))
+  (should (equal (concat "* tearaway ~noun~\n  tear·away | ˈter-ə-ˌwā\n  /British/\n"
+                         "** a rebellious and unruly or reckless young person\n"
+                         "** Word history\n   First known use: 1950\n"
+                         "* tear away ~verb~\n"
+                         "  tore away; torn away; tearing away; tears away\n"
+                         "** transitive verb\n"
+                         "*** to remove (someone, such as oneself) reluctantly\n"
+                         "** Word history\n   First known use: circa 1699\n")
+                 (mw-thesaurus-test--dictionary "tearaway")))
+  (should (equal (concat "* Borstal ~noun~\n  Bor·stal | ˈbȯr-stᵊl\n  /British/\n"
+                         "** reformatory\n"
+                         "** Word history\n"
+                         "   Etymology: /Borstal/, English village where the first"
+                         " such institution was set up\n"
+                         "   First known use: 1907\n")
+                 (mw-thesaurus-test--dictionary "borstal"))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-biographical-names-test ()
+  (should (string-match-p
+           (concat "^\\* Cowl ~biographical name~\n  ˈkau̇(-ə)l\n"
+                   "\\*\\* Jane 1883–1950 originally /Grace Bailey/ American actress\n")
+           (mw-thesaurus-test--dictionary "cowl"))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-divided-senses-test ()
+  (let ((happy (mw-thesaurus-test--dictionary "happy")))
+    (should (string-match-p
+             (concat "^\\*\\* 1 : informal talk among the participants in a television"
+                     " news broadcast\n"
+                     "   /also/ : a broadcast format featuring such talk\n"
+                     "\\*\\* 2 : optimistic talk\n")
+             happy))
+    (should (string-match-p
+             (concat "^\\*\\* 1 : irresponsible in the use of firearms\n"
+                     "   /especially/ : inclined to shoot before clearly identifying"
+                     " the target\n")
+             happy)))
+  (should (string-match-p
+           (concat "^\\*\\*\\* 12 a : to adjust (a device and especially a measuring"
+                   " device) to a desired position\n"
+                   "    - /set/ the alarm for 7:00\n"
+                   "    - /set/ a thermostat at 68\n"
+                   "    /also/ : to adjust (something, such as a clock) in conformity"
+                   " with a standard\n")
+           (mw-thesaurus-test--dictionary "set"))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-usage-notes-test ()
+  (let ((org (mw-thesaurus-test--dictionary "both")))
+    (should (string-match-p
+             (concat "^\\* both ~conjunction~\n"
+                     "\\*\\* — used as a function word to indicate and stress the"
+                     " inclusion of each of two or more things specified by"
+                     " coordinated words, phrases, or clauses\n"
+                     "   - prized /both/ for its beauty and for its utility\n"
+                     "   - he … who loveth well /both/ man and bird and beast"
+                     " — S. T. Coleridge\n"
+                     "\\*\\* Word history\n"
+                     "   Etymology: Middle English /bothe,/ from the use of the"
+                     " quantifier /bothe/ both as a correlative conjunction\n")
+             org))
+    (should (string-match-p
+             "^   Note: Middle English /bothe/ is also thought to reflect the Old Norse"
+             org))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-cognate-entries-test ()
+  (should (equal (concat "* went\n  past tense of go\n"
+                         "** Word history\n"
+                         "   Etymology: Middle English, past & past participle of"
+                         " /wenden/ to wend\n")
+                 (mw-thesaurus-test--dictionary "went"))))
+
 (defun mw-thesaurus-test--entries (&rest entries)
   "Return the body of a response with ENTRIES, each (HEADWORD . STEMS)."
   (concat
@@ -75,30 +193,37 @@ Only WORDS have entries.  Any other word gets SUGGESTIONS."
       (mw-thesaurus-test--entries (list word word))
     (json-encode (vconcat suggestions))))
 
+(defun mw-thesaurus-test--fake-api (respond)
+  "Return a fake `url-retrieve' that answers with RESPOND.
+RESPOND takes the requested word and returns the response body, or an
+error for the callback status."
+  (lambda (url callback &rest _)
+    (string-match "/json/\\([^?]*\\)" url)
+    (let ((body (funcall respond (url-unhex-string (match-string 1 url)))))
+      (with-temp-buffer
+        (when (stringp body)
+          (mw-thesaurus-test--insert-response body))
+        (funcall callback (unless (stringp body) (list :error body)))))))
+
 (defun mw-thesaurus-test--call (respond lookup-fn)
-  "Call LOOKUP-FN against a fake thesaurus API.
+  "Call LOOKUP-FN against a fake Merriam-Webster API.
 RESPOND takes the requested word and returns the response body, or an
 error for the callback status.  Return a plist of the request URLs, the
-words and texts sent to the thesaurus buffer and the echo area messages."
-  (let (urls words rendered messages)
+words, texts and references sent to the buffer and the echo area messages."
+  (let ((api (mw-thesaurus-test--fake-api respond))
+        urls words rendered references messages)
     (cl-letf (((symbol-function 'url-retrieve)
-               (lambda (url callback &rest _)
-                 (push url urls)
-                 (string-match "/json/\\([^?]*\\)" url)
-                 (let ((body (funcall respond
-                                      (url-unhex-string (match-string 1 url)))))
-                   (with-temp-buffer
-                     (when (stringp body)
-                       (mw-thesaurus-test--insert-response body))
-                     (funcall callback (unless (stringp body) (list :error body)))))))
+               (lambda (url &rest args) (push url urls) (apply api url args)))
               ((symbol-function 'mw-thesaurus--create-buffer)
-               (lambda (word dict-str) (push word words) (push dict-str rendered)))
+               (lambda (word dict-str &optional reference)
+                 (push word words) (push dict-str rendered) (push reference references)))
               ((symbol-function 'message)
                (lambda (fmt &rest args) (push (apply #'format fmt args) messages))))
       (funcall lookup-fn))
     (list :urls (nreverse urls)
           :words (nreverse words)
           :rendered (nreverse rendered)
+          :references (nreverse references)
           :messages (nreverse messages))))
 
 (defun mw-thesaurus-test--lookup (words suggestions lookup-fn)
@@ -288,7 +413,7 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
                  (lambda (_) "Invalid API key. Not subscribed for this reference.")
                  (lambda () (mw-thesaurus--lookup-word "happy")))))
     (should-not (plist-get result :rendered))
-    (should (equal '("Merriam-Webster: Invalid API key. Not subscribed for this reference.")
+    (should (equal '("Merriam-Webster: Invalid API key. Not subscribed for this reference.  Set `mw-thesaurus-api-key' to a Collegiate Thesaurus key from https://dictionaryapi.com")
                    (plist-get result :messages)))))
 
 (ert-deftest mw-thesaurus-lookup-reports-request-failure-test ()
@@ -298,6 +423,76 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (should-not (plist-get result :rendered))
     (should (equal '("Merriam-Webster request failed: (error http 503)")
                    (plist-get result :messages)))))
+
+(defun mw-thesaurus-test--dictionary-response (word)
+  "Return the dictionary response for WORD: decline, or suggestions."
+  (if (equal word "decline")
+      (mw-thesaurus-test--asset "dictionary-decline.json")
+    "[\"decline\",\"decliner\"]"))
+
+(ert-deftest mw-thesaurus-dictionary-lookup-dwim-test ()
+  (with-temp-buffer
+    (insert "in decline")
+    (goto-char 5)
+    (let ((result (mw-thesaurus-test--call #'mw-thesaurus-test--dictionary-response
+                                           #'mw-thesaurus-dictionary-lookup-dwim)))
+      (should (equal (list (concat mw-thesaurus--dictionary-api-url "decline?key="
+                                   mw-thesaurus-dictionary-api-key))
+                     (plist-get result :urls)))
+      (should (equal '("decline") (plist-get result :words)))
+      (should (equal '(dictionary) (plist-get result :references)))
+      (should (string-prefix-p "* decline ~verb~\n  de·cline | "
+                               (car (plist-get result :rendered))))
+      (should-not (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-dictionary-lookup-falls-back-test ()
+  (let ((result (mw-thesaurus-test--call
+                 #'mw-thesaurus-test--dictionary-response
+                 (lambda () (mw-thesaurus--lookup-word "declne" 'dictionary)))))
+    (should (equal 2 (length (plist-get result :urls))))
+    (should (string-match-p "/collegiate/json/decline\\?" (nth 1 (plist-get result :urls))))
+    (should (equal '(dictionary) (plist-get result :references)))
+    (should (equal '("No Merriam-Webster dictionary entry for \"declne\", showing \"decline\"")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-dictionary-lookup-reports-a-miss-test ()
+  (let ((result (mw-thesaurus-test--call
+                 (lambda (_) "[]")
+                 (lambda () (mw-thesaurus--lookup-word "xqzvbnwpt" 'dictionary)))))
+    (should-not (plist-get result :rendered))
+    (should (equal '("No Merriam-Webster dictionary entry for \"xqzvbnwpt\"")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-dictionary-lookup-without-a-key-test ()
+  (let* ((mw-thesaurus-dictionary-api-key nil)
+         (result (mw-thesaurus-test--call
+                  #'mw-thesaurus-test--dictionary-response
+                  (lambda ()
+                    (should (equal (list 'user-error "Set `mw-thesaurus-dictionary-api-key' to a Collegiate Dictionary key from https://dictionaryapi.com")
+                                   (should-error (mw-thesaurus--lookup-word "decline" 'dictionary)
+                                                 :type 'user-error)))))))
+    (should-not (plist-get result :urls))))
+
+(ert-deftest mw-thesaurus-dictionary-lookup-shows-key-error-test ()
+  (let ((result (mw-thesaurus-test--call
+                 (lambda (_) "Invalid API key. Not subscribed for this reference.")
+                 (lambda () (mw-thesaurus--lookup-word "decline" 'dictionary)))))
+    (should-not (plist-get result :rendered))
+    (should (equal '("Merriam-Webster dictionary: Invalid API key. Not subscribed for this reference.  Set `mw-thesaurus-dictionary-api-key' to a Collegiate Dictionary key from https://dictionaryapi.com")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-lookup-at-point-follows-the-page-test ()
+  (with-temp-buffer
+    (insert "to slope downward")
+    (setq-local mw-thesaurus--reference 'dictionary)
+    (goto-char 5)
+    (let ((result (mw-thesaurus-test--call
+                   (lambda (_) "[]")
+                   (lambda ()
+                     (call-interactively #'mw-thesaurus-lookup-at-point)
+                     (mw-thesaurus-lookup-dwim)))))
+      (should (string-match-p "/collegiate/json/slope\\?" (nth 0 (plist-get result :urls))))
+      (should (string-match-p "/thesaurus/json/slope\\?" (nth 1 (plist-get result :urls)))))))
 
 (ert-deftest mw-thesaurus--create-buffer-reuses-the-thesaurus-window-test ()
   (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
@@ -371,14 +566,39 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (should (eq #'org-self-insert-command (key-binding "q")))
     (should (eq #'org-self-insert-command (key-binding "l")))
     (should (eq #'org-return (key-binding (kbd "RET"))))
+    (should (eq #'org-self-insert-command (key-binding "o")))
     (should-not (command-remapping 'evil-ret))
     (should-not (command-remapping 'evil-record-macro))
     (should-not (command-remapping 'evil-window-top))
+    (should-not (command-remapping 'evil-open-below))
     (should (eq #'mw-thesaurus-lookup-at-point (key-binding (kbd "C-c C-o"))))
     (read-only-mode 1)
     (should (eq #'mw-thesaurus--quit (key-binding "q")))
     (should (eq #'mw-thesaurus-back (command-remapping 'evil-window-top)))
     (should (eq #'mw-thesaurus-lookup-at-point (key-binding (kbd "C-c C-o"))))))
+
+(ert-deftest mw-thesaurus-mode-o-switches-reference-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    (should (eq #'mw-thesaurus-switch-reference (key-binding "o")))
+    (should (eq #'mw-thesaurus-switch-reference (command-remapping 'evil-open-below)))
+    (should (eq #'mw-thesaurus-switch-reference (command-remapping 'evil-org-open-below)))))
+
+(ert-deftest mw-thesaurus-header-line-marks-the-reference-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    ;; `format-mode-line' gives an empty string in batch mode.
+    (should (equal '(:eval (mw-thesaurus--header-line)) header-line-format))
+    (setq mw-thesaurus--reference 'dictionary)
+    (let ((line (mw-thesaurus--header-line)))
+      (should (equal " Thesaurus   Dictionary" (substring-no-properties line)))
+      (should (eq 'bold (get-text-property (string-match "Dictionary" line) 'face line)))
+      (should-not (get-text-property (string-match "Dictionary" line) 'local-map line))
+      (let ((other (string-match "Thesaurus" line)))
+        (should (eq 'shadow (get-text-property other 'face line)))
+        (should (eq #'mw-thesaurus-switch-reference
+                    (lookup-key (get-text-property other 'local-map line)
+                                [header-line mouse-1])))))))
 
 (ert-deftest mw-thesaurus-mode-keeps-org-overriding-maps-test ()
   (let ((org-modes (with-temp-buffer
@@ -447,6 +667,58 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
           (with-current-buffer mw-thesaurus-buffer-name
             (should-error (mw-thesaurus-back) :type 'user-error)))
       (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-switch-reference-and-back-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+        (dictionary (mw-thesaurus-test--fake-api
+                     (lambda (_) (mw-thesaurus-test--asset "dictionary-decline.json"))))
+        (thesaurus (mw-thesaurus-test--fake-api
+                    (lambda (_) (mw-thesaurus-test--asset "sample.json"))))
+        urls)
+    (unwind-protect
+        (progn
+          (mw-thesaurus-test--pages '("decline" "* decline ~verb~\n"))
+          (cl-letf (((symbol-function 'switch-to-buffer-other-window) #'ignore)
+                    ((symbol-function 'url-retrieve)
+                     (lambda (url &rest args)
+                       (push url urls)
+                       (apply (if (string-match-p "/collegiate/" url) dictionary thesaurus)
+                              url args))))
+            ;; The `url-retrieve' callback runs in a buffer of its own.
+            (with-temp-buffer (mw-thesaurus-switch-reference))
+            (with-temp-buffer (mw-thesaurus-switch-reference)))
+          (should (string-match-p "/collegiate/json/decline\\?" (nth 1 urls)))
+          (should (string-match-p "/thesaurus/json/decline\\?" (nth 0 urls)))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should (eq 'thesaurus mw-thesaurus--reference))
+            (should (equal (mw-thesaurus-test--asset "sample.org") (buffer-string)))
+            (mw-thesaurus-back)
+            (should (eq 'dictionary mw-thesaurus--reference))
+            (should (string-prefix-p "* decline ~verb~\n  de·cline" (buffer-string)))
+            (mw-thesaurus-back)
+            (should (eq 'thesaurus mw-thesaurus--reference))
+            (should (equal "* decline ~verb~\n" (buffer-string)))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-switch-reference-from-the-dictionary-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (progn
+          (mw-thesaurus-test--pages '("decline" "* decline ~verb~\n" dictionary))
+          (let ((result (mw-thesaurus-test--call (lambda (_) "[]")
+                                                 #'mw-thesaurus-switch-reference)))
+            (should (string-match-p "/thesaurus/json/decline\\?"
+                                    (car (plist-get result :urls))))
+            ;; A miss keeps the page.
+            (should (equal '("No Merriam-Webster entry for \"decline\"")
+                           (plist-get result :messages))))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should (eq 'dictionary mw-thesaurus--reference))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-switch-reference-needs-a-page-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test-none*"))
+    (should-error (mw-thesaurus-switch-reference) :type 'user-error)))
 
 (ert-deftest mw-thesaurus-mode-derives-from-org-mode-test ()
   (with-temp-buffer

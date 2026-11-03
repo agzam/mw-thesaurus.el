@@ -5,7 +5,14 @@ Changes to the project, following Keep a Changelog conventions.
 
 * [Unreleased]
 
+** Added
+- ~mw-thesaurus-dictionary-lookup-dwim~ looks up the region, the word at point or a word it asks for in the Merriam-Webster Collegiate Dictionary, with a shared key in ~mw-thesaurus-dictionary-api-key~; the idea and its first implementation come from Marty Hiatt's fork, [[https://codeberg.org/martianh/mw.el][mw.el]]
+- a dictionary page shows pronunciation, inflections, numbered senses with examples and usage notes, and the word's history
+- the header line names both references and marks the one shown; ~o~, or a click on the other label, shows the word in the other reference, and ~l~ goes back across both
+- ~RET~ on a dictionary page looks up the word at point in the dictionary
+
 ** Changed
+- a refused API key also says which variable to set
 - ~RET~, ~l~ and ~q~ in the thesaurus buffer, and evil's ~RET~, ~H~ and ~q~, act only while the page is read-only, as it is after every lookup; after ~C-x C-q~ the page types them and evil's keys work as in any buffer
 - these keys live in the new ~mw-thesaurus-read-only-map~, which outranks ~mw-thesaurus-mode-map~; a single-key binding of your own, such as the readme's Doom remaps, goes there too
 

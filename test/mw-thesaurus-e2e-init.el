@@ -58,10 +58,11 @@
             (lambda (word &rest _) (mw-e2e--log 'lookup word))
             '((name . mw-e2e)))
 
-;; The Org text is the last argument in every version of the package.
+;; The Org text is the last string argument in every version of the package.
 (advice-add 'mw-thesaurus--create-buffer :after
             (lambda (&rest args)
-              (mw-e2e--log 'render (car (split-string (car (last args)) "\n"))))
+              (mw-e2e--log 'render (car (split-string (seq-find #'stringp (reverse args))
+                                                      "\n"))))
             '((name . mw-e2e)))
 
 (let ((default command-error-function))
@@ -142,6 +143,10 @@
                                  (push (match-string-no-properties 0) heads))
                                (nreverse heads)))
                     :senses (count-matches "^\\*\\* " (point-min) (point-max))
+                    :reference (bound-and-true-p mw-thesaurus--reference)
+                    :header (when-let* ((window (get-buffer-window thesaurus)))
+                              (substring-no-properties
+                               (format-mode-line header-line-format nil window thesaurus)))
                     :mode major-mode
                     :org (and (derived-mode-p 'org-mode) t)
                     :mw (or (bound-and-true-p mw-thesaurus-mode)
