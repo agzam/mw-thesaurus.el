@@ -82,3 +82,11 @@ The header line names both references, Thesaurus and Dictionary, and marks the o
 These keys act while the page is read-only, as it is after every lookup. ~C-x C-q~ makes the page writable: then it types them, and evil's keys work as in any buffer. Bind your own single keys in ~mw-thesaurus-read-only-map~, which outranks ~mw-thesaurus-mode-map~.
 
 ~C-c C-o~ open the page on merriam-webster.com
+
+* Related packages
+
+- [[https://github.com/agzam/wiktionary-bro.el][wiktionary-bro.el]] :: etymology lookup
+- [[https://melpa.org/#/define-it][define-it]] :: definition lookup
+- [[https://melpa.org/#/define-word][define-word]] :: definition lookup - grabs it from wordnik.com
+- [[https://github.com/jamescherti/quick-sdcv.el][quick-sdcv]] :: modern fork of much older [[https://melpa.org/#/sdcv][sdcv.el]] - interface to Stardict CLI. Lifesaver for when you suddenly have no internet.
+ 
