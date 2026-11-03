@@ -534,13 +534,12 @@ Emacs color names and #RRRRGGGGBBBB strings mean nothing to SVG."
                    (color-values color)
                    (color-values (or toward color)))))
 
-(defun mw-thesaurus--audio-svg (text)
-  "Return an SVG button with TEXT and a speaker, sized to the default font.
+(defun mw-thesaurus--audio-svg (text font)
+  "Return an SVG button with TEXT and a speaker for FONT, a `font-info' vector.
 Empty TEXT leaves the speaker alone.  The button is 4 pixels taller than
 a line, and its text sits where Emacs puts the line's baseline in an
 image with `:ascent' `center'."
-  (let* ((font (font-info (face-font 'default)))
-         (char (default-font-width))
+  (let* ((char (default-font-width))
          (height (+ (aref font 3) 4))
          (baseline (/ (+ height (aref font 8) (- (aref font 9)) 1) 2))
          (color (face-foreground 'link nil 'default))
@@ -584,25 +583,28 @@ image with `:ascent' `center'."
   "Draw each pronunciation link of the page as a button with a speaker.
 A link to a dictionary entry gets the speaker alone.  A terminal, or an
 Emacs without SVG, shows the links as they are."
-  (when (and (display-graphic-p) (image-type-available-p 'svg))
+  ;; An Emacs built without a window system has no `font-info'.
+  (when (and (display-graphic-p) (image-type-available-p 'svg) (fboundp 'font-info))
     (save-excursion
       (goto-char (point-min))
-      (while (re-search-forward
-              "\\[\\[\\(mw-thesaurus-\\(entry-\\)?audio:[^]]+\\)\\]\\[\\([^]]+\\)\\]\\]" nil t)
-        (let ((link (concat "[[" (match-string-no-properties 1) "]]")))
-          (make-button (match-beginning 0) (match-end 0)
-                       'display (svg-image (mw-thesaurus--audio-svg
-                                            (if (match-beginning 2)
-                                                ""
-                                              (match-string-no-properties 3)))
-                                           ;; The SVG is drawn to the font's pixels.
-                                           :scale 1 :ascent 'center)
-                       'action (lambda (_) (org-link-open-from-string link))
-                       ;; Emacs would underline the image as it does the link.
-                       'face '(:underline nil)
-                       'follow-link t
-                       'help-echo "mouse-1, RET: hear it"
-                       'mw-thesaurus t))))))
+      (let ((font (font-info (face-font 'default))))
+        (while (re-search-forward
+                "\\[\\[\\(mw-thesaurus-\\(entry-\\)?audio:[^]]+\\)\\]\\[\\([^]]+\\)\\]\\]" nil t)
+          (let ((link (concat "[[" (match-string-no-properties 1) "]]")))
+            (make-button (match-beginning 0) (match-end 0)
+                         'display (svg-image (mw-thesaurus--audio-svg
+                                              (if (match-beginning 2)
+                                                  ""
+                                                (match-string-no-properties 3))
+                                              font)
+                                             ;; The SVG is drawn to the font's pixels.
+                                             :scale 1 :ascent 'center)
+                         'action (lambda (_) (org-link-open-from-string link))
+                         ;; Emacs would underline the image as it does the link.
+                         'face '(:underline nil)
+                         'follow-link t
+                         'help-echo "mouse-1, RET: hear it"
+                         'mw-thesaurus t)))))))
 
 (defun mw-thesaurus--faces ()
   "Show each run of page text marked by `mw-thesaurus--face' in its face.

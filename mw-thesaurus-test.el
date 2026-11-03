@@ -861,17 +861,17 @@ A batch Emacs gives the nearest of its few terminal colors."
     (should (equal "#ffffff" (mw-thesaurus--svg-color "white")))
     (should (equal "#616d7d" (mw-thesaurus--svg-color "#33cd39d34713" "#8fa1b3" 0.5)))))
 
+(defconst mw-thesaurus-test--font
+  ["Fira Code-18" "Fira Code" 18 23 0 0 0 11 17 6 11 11 nil nil]
+  "The `font-info' of an 18-pixel font: a 23-pixel line, ascent 17, descent 6.")
+
 (defun mw-thesaurus-test--svg (text)
-  "Return the button for TEXT drawn for an 18-pixel font and a dark theme.
-The font has a 23-pixel line, ascent 17 and descent 6."
+  "Return the button for TEXT drawn for `mw-thesaurus-test--font' and a dark theme."
   (cl-letf (((symbol-function 'color-values) #'mw-thesaurus-test--gui-color-values)
-            ((symbol-function 'face-font) (lambda (&rest _) "Fira Code-18"))
-            ((symbol-function 'font-info)
-             (lambda (&rest _) ["Fira Code-18" "Fira Code" 18 23 0 0 0 11 17 6 11 11 nil nil]))
             ((symbol-function 'default-font-width) (lambda () 11))
             ((symbol-function 'face-foreground) (lambda (&rest _) "#8fa1b3"))
             ((symbol-function 'face-background) (lambda (&rest _) "#33cd39d34713")))
-    (mw-thesaurus--audio-svg text)))
+    (mw-thesaurus--audio-svg text mw-thesaurus-test--font)))
 
 (defun mw-thesaurus-test--speaker-left (svg)
   "Return the left edge of the speaker in SVG."
@@ -914,7 +914,9 @@ The font has a 23-pixel line, ascent 17 and descent 6."
     (unwind-protect
         (cl-letf (((symbol-function 'display-graphic-p) (lambda (&rest _) t))
                   ((symbol-function 'image-type-available-p) (lambda (&rest _) t))
-                  ((symbol-function 'mw-thesaurus--audio-svg) (lambda (text) (list 'svg nil text)))
+                  ((symbol-function 'font-info) (lambda (&rest _) mw-thesaurus-test--font))
+                  ((symbol-function 'mw-thesaurus--audio-svg)
+                   (lambda (text font) (should (eq mw-thesaurus-test--font font)) (list 'svg nil text)))
                   ((symbol-function 'svg-image)
                    (lambda (svg &rest props) (append (list 'image :svg svg) props)))
                   ((symbol-function 'mw-thesaurus--play)
@@ -958,7 +960,9 @@ The font has a 23-pixel line, ascent 17 and descent 6."
     (unwind-protect
         (cl-letf (((symbol-function 'display-graphic-p) (lambda (&rest _) t))
                   ((symbol-function 'image-type-available-p) (lambda (&rest _) t))
-                  ((symbol-function 'mw-thesaurus--audio-svg) (lambda (text) (list 'svg nil text)))
+                  ((symbol-function 'font-info) (lambda (&rest _) mw-thesaurus-test--font))
+                  ((symbol-function 'mw-thesaurus--audio-svg)
+                   (lambda (text font) (should (eq mw-thesaurus-test--font font)) (list 'svg nil text)))
                   ((symbol-function 'svg-image)
                    (lambda (svg &rest props) (append (list 'image :svg svg) props)))
                   ((symbol-function 'mw-thesaurus--entry-audio)
