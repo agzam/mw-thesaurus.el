@@ -95,6 +95,11 @@ Each page is a list (WORD TEXT POINT REFERENCE NO-ENTRY).")
 (put 'mw-thesaurus--no-entry 'permanent-local t)
 (put 'mw-thesaurus--history 'permanent-local t)
 
+(defvar mw-thesaurus--lookups 0
+  "The count of lookups started; a request carries its lookup's count.
+A later lookup, going back and quitting raise it, so an answer that comes
+after one of them is dropped.")
+
 (defvar mw-thesaurus--header-line-map
   (let ((map (make-sparse-keymap)))
     (define-key map [header-line mouse-1] #'mw-thesaurus-switch-reference)
@@ -679,15 +684,21 @@ ends\" for \"both\"."
 
 (defun mw-thesaurus--read-response ()
   "Parse the HTTP response in the current `url-retrieve' buffer.
-Return the body text when it is not JSON, e.g. a key error."
+Return the body text unless it is a JSON array of entries or spelling
+suggestions; a key error, for one, comes as plain text."
   (goto-char (point-min))
   (re-search-forward "\r?\n\r?\n" nil 'move)
-  (let ((body (decode-coding-string
-               (buffer-substring-no-properties (point) (point-max)) 'utf-8)))
-    (condition-case nil
-        (let ((json-array-type 'list))
-          (json-read-from-string body))
-      (json-error (string-trim body)))))
+  (let* ((body (decode-coding-string
+                (buffer-substring-no-properties (point) (point-max)) 'utf-8))
+         (data (condition-case nil
+                   (let ((json-array-type 'list))
+                     (json-read-from-string body))
+                 (json-error body))))
+    (if (and (listp data)
+             (seq-every-p (lambda (item) (or (stringp item) (consp (car-safe item))))
+                          data))
+        data
+      (string-trim body))))
 
 (defun mw-thesaurus--show (word text &optional pos reference no-entry)
   "Show TEXT, the entries for WORD in REFERENCE, in the current buffer.
@@ -749,6 +760,8 @@ Point returns to where it was, and no request goes to Merriam-Webster."
   (interactive)
   (unless mw-thesaurus--history
     (user-error "No earlier lookup to go back to"))
+  ;; A lookup still waiting for its answer must not replace this page.
+  (setq mw-thesaurus--lookups (1+ mw-thesaurus--lookups))
   (apply #'mw-thesaurus--show (pop mw-thesaurus--history)))
 
 (defun mw-thesaurus--key-help (reference)
@@ -774,33 +787,38 @@ Point returns to where it was, and no request goes to Merriam-Webster."
                mw-thesaurus-api-key)))
     (unless (string-empty-p (or key "")) key)))
 
-(defun mw-thesaurus--request (word reference callback)
+(defun mw-thesaurus--request (word reference callback &optional lookup)
   "Ask REFERENCE about WORD, then call CALLBACK with the parsed answer.
 A failed request, or a reply that is not JSON such as a key error, goes
-to the echo area instead."
+to the echo area instead.  LOOKUP is the count of the lookup the request
+serves; see `mw-thesaurus--lookups'."
   (let ((dictionary (eq reference 'dictionary))
         (key (or (mw-thesaurus--key reference)
-                 (user-error "%s" (mw-thesaurus--key-help reference)))))
+                 (user-error "%s" (mw-thesaurus--key-help reference))))
+        answered)
     (url-retrieve
      (concat (if dictionary mw-thesaurus--dictionary-api-url mw-thesaurus--api-url)
              (url-hexify-string (mw-thesaurus--fold word)) "?key=" key)
      (lambda (status)
-       (let* ((response (current-buffer))
-              (err (plist-get status :error))
-              (data (unless err (mw-thesaurus--read-response))))
+       (let ((response (current-buffer)))
          ;; CALLBACK runs in the response buffer: in a buffer of the
          ;; user's, such as *scratch*, [[:space:]] misses a newline.
          (unwind-protect
-             (cond
-              (err (message "%s request failed: %S"
-                            (mw-thesaurus--source reference) err))
-              ((stringp data)
-               (let ((reply (car (split-string data "\n"))))
-                 (message "%s: %s%s" (mw-thesaurus--source reference) reply
-                          (if (string-prefix-p "Invalid API key" reply)
-                              (concat "  " (mw-thesaurus--key-help reference))
-                            ""))))
-              (t (funcall callback data)))
+             ;; url.el calls back a second time for a refused connection.
+             (unless (or answered (and lookup (/= lookup mw-thesaurus--lookups)))
+               (setq answered t)
+               (let* ((err (plist-get status :error))
+                      (data (unless err (mw-thesaurus--read-response))))
+                 (cond
+                  (err (message "%s request failed: %S"
+                                (mw-thesaurus--source reference) err))
+                  ((stringp data)
+                   (let ((reply (car (split-string data "\n"))))
+                     (message "%s: %s%s" (mw-thesaurus--source reference) reply
+                              (if (string-prefix-p "Invalid API key" reply)
+                                  (concat "  " (mw-thesaurus--key-help reference))
+                                ""))))
+                  (t (funcall callback data)))))
            (kill-buffer response))))
      nil t t)))
 
@@ -816,23 +834,37 @@ NO-ENTRY becomes the page's `mw-thesaurus--no-entry'."
      reference no-entry)
     t))
 
-(defun mw-thesaurus--lookup-suggestion (word reference data)
+(defun mw-thesaurus--lookup-suggestion (word reference data fallback)
   "Look up the first spelling suggestion in DATA, REFERENCE's answer for WORD.
 Take it only one or two edits away, at most one per two letters; else
-say that REFERENCE has no entry for WORD."
+show FALLBACK's entries for WORD."
   (let* ((suggestion (car (mw-thesaurus--suggestions data)))
          (edits (and suggestion
                      (string-distance (downcase word) (downcase suggestion)))))
     (if (and suggestion (< 0 edits 3) (<= (* 2 edits) (length word)))
-        (mw-thesaurus--lookup-word suggestion reference word)
-      (message "No %s entry for \"%s\"" (mw-thesaurus--source reference) word))))
+        (mw-thesaurus--lookup-word suggestion reference word fallback)
+      (mw-thesaurus--lookup-fallback word reference fallback))))
+
+(defun mw-thesaurus--lookup-fallback (word reference fallback)
+  "Show FALLBACK's entries for WORD, which REFERENCE has no entry for.
+With no FALLBACK, no key for it, or no entry there either, say that
+REFERENCE has none."
+  (if (and fallback (mw-thesaurus--key fallback))
+      (mw-thesaurus--request
+       word fallback
+       (lambda (answer)
+         (unless (mw-thesaurus--show-entries word answer fallback reference)
+           (message "No %s entry for \"%s\"" (mw-thesaurus--source reference) word)))
+       mw-thesaurus--lookups)
+    (message "No %s entry for \"%s\"" (mw-thesaurus--source reference) word)))
 
 (defun mw-thesaurus--lookup-word (word &optional reference missed-word fallback)
   "Look up WORD in REFERENCE, the thesaurus by default, and show its entries.
-With no entry, show the entries for WORD in FALLBACK, the other reference,
-and failing that, a spelling suggestion.  MISSED-WORD, the word that had
-no entry, goes to the echo area and prevents a second fallback."
-  (let ((reference (or reference 'thesaurus)))
+With no entry, look up the closest spelling suggestion, and failing that,
+show the entries for the word in FALLBACK, the other reference.
+MISSED-WORD is the word whose suggestion WORD is."
+  (let ((reference (or reference 'thesaurus))
+        (lookup (setq mw-thesaurus--lookups (1+ mw-thesaurus--lookups))))
     (mw-thesaurus--request
      word reference
      (lambda (data)
@@ -841,16 +873,9 @@ no entry, goes to the echo area and prevents a second fallback."
          (when missed-word
            (message "No %s entry for \"%s\", showing \"%s\""
                     (mw-thesaurus--source reference) missed-word word)))
-        (missed-word
-         (message "No %s entry for \"%s\"" (mw-thesaurus--source reference) missed-word))
-        ((and fallback (mw-thesaurus--key fallback))
-         ;; A word the other reference has is not a typo.
-         (mw-thesaurus--request
-          word fallback
-          (lambda (answer)
-            (unless (mw-thesaurus--show-entries word answer fallback reference)
-              (mw-thesaurus--lookup-suggestion word reference data)))))
-        (t (mw-thesaurus--lookup-suggestion word reference data)))))))
+        (missed-word (mw-thesaurus--lookup-fallback missed-word reference fallback))
+        (t (mw-thesaurus--lookup-suggestion word reference data fallback))))
+     lookup)))
 
 (defun mw-thesaurus-switch-reference ()
   "Look up the word of the page in the other reference, thesaurus or dictionary."
@@ -964,6 +989,8 @@ REFERENCE, the thesaurus by default, can also be `dictionary'."
   "Quit the selected window and kill the Merriam-Webster buffer."
   (interactive)
   (when-let* ((buffer (get-buffer mw-thesaurus-buffer-name)))
+    ;; A lookup still waiting for its answer must not bring the page back.
+    (setq mw-thesaurus--lookups (1+ mw-thesaurus--lookups))
     (quit-window)
     (kill-buffer buffer)))
 

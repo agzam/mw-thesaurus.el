@@ -35,7 +35,8 @@
 (defconst mw-e2e--window-cases
   '("dwim, word middle" "dictionary dwim" "switch with o" "back across references"
     "drill down with RET" "q quits" "reopen after q" "q on a dictionary page"
-    "frame already split" "dictionary, frame already split" "two lookups at once")
+    "frame already split" "dictionary, frame already split" "two lookups at once"
+    "dwim, word only the dictionary has")
   "The cases of the profiles that only add a window rule.")
 
 (defconst mw-e2e--only (getenv "MW_E2E_CASES")
@@ -280,6 +281,71 @@ A case that expects a page expects a dictionary page.  See
               (profile-keys ("l") ("H")) (pause 1))
       :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
                :lookups 2))
+     ("o on a page only the thesaurus has" :text "\n" :point 1 :tags (flow)
+      :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt) (type "drain away")
+              (keys "Enter") (wait-done) (keys "o") (pause 1))
+      :expect (:shows "^\\* drain (away) " :reference thesaurus
+               :error "No Merriam-Webster dictionary entry for \"drain away\"" :lookups 1))
+     ("C-c C-o on a page only one reference has" :text "It is famously hard.\n" :point 9
+      :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "C-c" "C-o") (pause 1))
+      :expect (:shows "^\\* famously " :reference dictionary :lookups 1
+               :browsed "https://www.merriam-webster.com/dictionary/famously"))
+     ("click the label of a page only one reference has" :text "It is famously hard.\n"
+      :point 9 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (eval (xterm-mouse-mode 1)) (click "Dictionary") (pause 2)
+              (eval (xterm-mouse-mode -1)))
+      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
+               :lookups 1))
+     ("back after o on a page only one reference has" :text "It is famously hard.\n"
+      :point 9 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "o") (pause 1)
+              (profile-keys ("l") ("H")) (pause 1))
+      :expect (:shows "^\\* famously " :reference dictionary :error "No earlier lookup"
+               :lookups 1))
+     ("o after going back to a page only one reference has" :text "It is famously hard.\n"
+      :point 9 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (search "celebrated") (keys "Enter") (wait-done 6)
+              (profile-keys ("l") ("H")) (pause 1) (keys "o") (pause 1))
+      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
+               :error "No Merriam-Webster entry for \"famously\"" :lookups 2))
+     ("o after RET from a page only one reference has" :text "It is famously hard.\n"
+      :point 9 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (search "celebrated") (keys "Enter") (wait-done 6) (keys "o") (wait-done 6))
+      :expect (:shows "^\\* celebrated " :reference thesaurus :current "Thesaurus"
+               :header "\\` Thesaurus   Dictionary\\'" :lookups 3))
+     ("thesaurus dwim on a page only one reference has" :text "It is famously hard.\n"
+      :point 9 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (search "celebrated") (cmd "mw-thesaurus-lookup-dwim") (wait-done 6))
+      :expect (:shows "^\\* celebrated " :reference thesaurus
+               :header "\\` Thesaurus   Dictionary\\'" :lookups 2))
+     ("at-point command, word only the dictionary has" :text "It is famously hard.\n"
+      :point 9 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-at-point") (wait-done))
+      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
+               :windows 2 :hook t))
+     ("dictionary region, phrase only the thesaurus has" :text "Hope can drain away.\n"
+      :point 10 :tags (flow)
+      :steps ((region ("C-Space" "M-f" "M-f") ("v" "e" "w" "e"))
+              (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done))
+      :expect (:shows "^\\* drain (away) " :reference thesaurus :header "\\` Thesaurus\\'"))
+     ("other reference's answer lands during M-x" :text "\n" :point 1 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup") (wait-prompt) (type "famously") (keys "Enter")
+              (keys "M-x") (wait-prompt) (wait-done) (type "ignore") (keys "Enter") (pause 1))
+      :expect (:shows "^\\* famously " :reference dictionary :lookups 1))
+     ("q while a lookup waits for its answer" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (eval (mw-e2e-slow-replies 2))
+              (search "glad") (keys "Enter") (keys "q") (pause 4))
+      :expect (:no-thesaurus t :lookups 2))
+     ("back while a lookup waits for its answer" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "o") (wait-done 6)
+              (eval (mw-e2e-slow-replies 2))
+              (search "fortune") (keys "Enter") (profile-keys ("l") ("H")) (pause 4))
+      :expect (:shows "^\\* happy " :reference thesaurus :lookups 3))
      ("back through both references" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "o") (wait-done 6)
               (search "fortune") (keys "Enter") (wait-done 6)
@@ -452,9 +518,19 @@ A case that expects a page expects a dictionary page.  See
                        :shows "^\\* separate " :only "separate" :echo "showing \"separate\"")
     (mw-e2e--word-case "missing etymology" "etymology" :shows "^\\* etymology "
                        :reference 'dictionary)
-    (mw-e2e--word-case "missing lisp" "lisp" :shows "^\\* lisp " :reference 'dictionary)
+    (mw-e2e--word-case "missing lisp" "lisp" :shows "^\\* lip " :echo "showing \"lip\"")
+    (mw-e2e--word-case "closest word notoriously" "notoriously" :shows "^\\* notorious "
+                       :echo "showing \"notorious\"")
+    (mw-e2e--word-case "missing famously" "famously" :shows "^\\* famously "
+                       :reference 'dictionary :header "\\` Dictionary\\'" :lookups 1)
+    (mw-e2e--word-case "missing Famously" "Famously" :shows "^\\* famously "
+                       :reference 'dictionary)
+    (mw-e2e--word-case "missing FAMOUSLY" "FAMOUSLY" :shows "^\\* famously "
+                       :reference 'dictionary)
+    (mw-e2e--word-case "missing kubernetes" "kubernetes" :no-thesaurus t :lookups 1
+                       :echo "No Merriam-Webster entry for \"kubernetes\"")
     (mw-e2e--word-case "gibberish" "xqzvbnwpt" :no-thesaurus t :lookups 1)
-    (mw-e2e--word-case "apostrophe don't" "don't" :shows "^\\* don't " :reference 'dictionary)
+    (mw-e2e--word-case "apostrophe don't" "don't" :shows "^\\* don " :echo "showing \"don\"")
     (mw-e2e--word-case "apostrophe can't" "can't" :shows "^\\* can't " :reference 'dictionary)
     (mw-e2e--word-case "hyphen well-known" "well-known"
                        :shows "^\\* well-known " :only "^\\* well-known ")
@@ -582,6 +658,59 @@ A case that expects a page expects a dictionary page.  See
               (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt) (type "happy")
               (keys "Enter") (wait-done 20))
       :expect (:no-thesaurus t :echo "dictionary request failed"))
+     ("word only the dictionary has, without a dictionary key" :text "\n" :point 1 :tags (env)
+      :steps ((eval (setq mw-thesaurus-dictionary-api-key nil))
+              (cmd "mw-thesaurus-lookup") (wait-prompt) (type "famously") (keys "Enter")
+              (wait-done))
+      :expect (:no-thesaurus t :echo "No Merriam-Webster entry for \"famously\"" :lookups 1))
+     ("word only the dictionary has, with an empty dictionary key" :text "\n" :point 1
+      :tags (env)
+      :steps ((eval (setq mw-thesaurus-dictionary-api-key ""))
+              (cmd "mw-thesaurus-lookup") (wait-prompt) (type "famously") (keys "Enter")
+              (wait-done))
+      :expect (:no-thesaurus t :echo "No Merriam-Webster entry for \"famously\"" :lookups 1))
+     ("dictionary, phrase only the thesaurus has, without a thesaurus key" :text "\n" :point 1
+      :tags (env)
+      :steps ((eval (setq mw-thesaurus-api-key ""))
+              (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt) (type "drain away")
+              (keys "Enter") (wait-done))
+      :expect (:no-thesaurus t :lookups 1
+               :echo "No Merriam-Webster dictionary entry for \"drain away\""))
+     ("a lookup right after one that falls back" :text "\n" :point 1 :tags (env)
+      :steps ((eval (mw-e2e-slow-replies 1))
+              (cmd "mw-thesaurus-lookup") (wait-prompt) (type "famously") (keys "Enter")
+              (cmd "mw-thesaurus-lookup") (wait-prompt) (type "happy") (keys "Enter")
+              (wait-done 20 3))
+      :expect (:shows "^\\* happy " :windows 2 :lookups 2))
+     ("a lookup right after a typo" :text "\n" :point 1 :tags (env)
+      :steps ((eval (mw-e2e-slow-replies 1))
+              (cmd "mw-thesaurus-lookup") (wait-prompt) (type "hapy") (keys "Enter")
+              (cmd "mw-thesaurus-lookup") (wait-prompt) (type "sad") (keys "Enter")
+              (wait-done 20 3))
+      :expect (:shows "^\\* sad " :windows 2))
+     ("typo, dictionary key refused" :text "\n" :point 1 :tags (env)
+      :steps ((eval (setq mw-thesaurus-dictionary-api-key "bad-e2e-key"))
+              (cmd "mw-thesaurus-lookup") (wait-prompt) (type "hapy") (keys "Enter")
+              (wait-done))
+      :expect (:shows "^\\* happy " :echo "showing \"happy\""))
+     ("word only the dictionary has, dictionary key refused" :text "\n" :point 1
+      :tags (env)
+      :steps ((eval (setq mw-thesaurus-dictionary-api-key "bad-e2e-key"))
+              (cmd "mw-thesaurus-lookup") (wait-prompt) (type "famously") (keys "Enter")
+              (wait-done))
+      :expect (:no-thesaurus t :echo "dictionary: Invalid API key" :lookups 1))
+     ("word only the dictionary has, dictionary HTTP 404" :text "\n" :point 1 :tags (env)
+      :steps ((eval (setq mw-thesaurus--dictionary-api-url
+                          "https://www.dictionaryapi.com/api/v3/references/collegiate/jsonx/"))
+              (cmd "mw-thesaurus-lookup") (wait-prompt) (type "famously") (keys "Enter")
+              (wait-done 20))
+      :expect (:no-thesaurus t :echo "dictionary request failed" :lookups 1))
+     ("dictionary, phrase only the thesaurus has, thesaurus key refused" :text "\n" :point 1
+      :tags (env)
+      :steps ((eval (setq mw-thesaurus-api-key "bad-e2e-key"))
+              (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt) (type "drain away")
+              (keys "Enter") (wait-done))
+      :expect (:no-thesaurus t :echo "\\`Merriam-Webster: Invalid API key" :lookups 1))
      ("recording missing on the server" :text "\n" :point 1 :tags (env)
       :steps ((eval (setq mw-thesaurus-audio-player '("true")))
               (eval (mw-thesaurus--play "nosuch99"))
@@ -592,6 +721,15 @@ A case that expects a page expects a dictionary page.  See
               (keys "C-x" "C-q" "C-e" "q") (pause 1) (keys "C-x" "C-q"))
       :expect (:shows "^\\* happy .*q$" :reference dictionary :lookups 1))
      ;; The upgrade cases go last: they load the checkout into origin/master's Emacs.
+     ("upgrade with pages in the history" :text ,mw-e2e--happy :point 10 :tags (env upgrade)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (search "glad") (keys "Enter") (wait-done 6)
+              (eval (let ((inhibit-message t))
+                      (load (expand-file-name "mw-thesaurus.el" ,mw-e2e--root) nil t)
+                      (setq mw-e2e-defaults (mw-e2e-defaults))))
+              (keys "l") (pause 1) (keys "o") (wait-done 6))
+      :expect (:shows "^\\* happy " :reference dictionary
+               :header "\\` Thesaurus   Dictionary\\'" :lookups 3))
      ("upgrade in a running session" :text "\n" :point 1 :tags (env upgrade)
       :steps ((eval (let ((inhibit-message t))
                       (load (expand-file-name "mw-thesaurus.el" ,mw-e2e--root) nil t)
@@ -605,7 +743,12 @@ A case that expects a page expects a dictionary page.  See
      ("upgrade, then o" :text "\n" :point 1 :tags (env upgrade)
       :steps ((cmd "mw-thesaurus-lookup") (wait-prompt) (type "happy") (keys "Enter")
               (wait-done) (keys "o") (wait-done 6))
-      :expect (:shows "^\\* happy " :reference dictionary :lookups 2))))
+      :expect (:shows "^\\* happy " :reference dictionary :lookups 2))
+     ("upgrade, then a word only the dictionary has" :text "It is famously hard.\n" :point 9
+      :tags (env upgrade)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "o") (pause 1))
+      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
+               :error "No Merriam-Webster entry for \"famously\"" :lookups 1))))
   "The cases: (LABEL :text :point :tags :steps :expect).
 Steps are (cmd NAME), (keys KEY...) in tmux names, (type TEXT),
 \(region or profile-keys VANILLA-KEYS EVIL-KEYS), (search TEXT),
