@@ -81,14 +81,18 @@ The buffer's own text can lose the indentation and faces of the page.")
 (defvar-local mw-thesaurus--reference 'thesaurus
   "The reference of the page the buffer shows, `thesaurus' or `dictionary'.")
 
+(defvar-local mw-thesaurus--no-entry nil
+  "The other reference if it has no entry for the word of the page, else nil.")
+
 (defvar-local mw-thesaurus--history nil
   "Pages the thesaurus buffer showed before the current one, newest first.
-Each page is a list (WORD TEXT POINT REFERENCE).")
+Each page is a list (WORD TEXT POINT REFERENCE NO-ENTRY).")
 
 ;; Showing a page reruns `mw-thesaurus-mode', which kills buffer-local variables.
 (put 'mw-thesaurus--word 'permanent-local t)
 (put 'mw-thesaurus--text 'permanent-local t)
 (put 'mw-thesaurus--reference 'permanent-local t)
+(put 'mw-thesaurus--no-entry 'permanent-local t)
 (put 'mw-thesaurus--history 'permanent-local t)
 
 (defvar mw-thesaurus--header-line-map
@@ -98,7 +102,8 @@ Each page is a list (WORD TEXT POINT REFERENCE).")
   "Keymap of the other reference's label in the header line.")
 
 (defun mw-thesaurus--header-line ()
-  "Return the header line: both references, the one shown in bold."
+  "Return the header line: both references, the one shown in bold.
+It leaves out `mw-thesaurus--no-entry', which has no entry for the word."
   (concat " "
           (mapconcat
            (lambda (reference)
@@ -110,7 +115,7 @@ Each page is a list (WORD TEXT POINT REFERENCE).")
                              'mouse-face 'header-line-highlight
                              'help-echo (format "mouse-1: show the word in the %s" reference)
                              'local-map mw-thesaurus--header-line-map))))
-           '(thesaurus dictionary) "   ")))
+           (remq mw-thesaurus--no-entry '(thesaurus dictionary)) "   ")))
 
 (defun mw-thesaurus--read-only-keys ()
   "Return `mw-thesaurus-read-only-map' less the keys bound in the mode map.
@@ -684,9 +689,10 @@ Return the body text when it is not JSON, e.g. a key error."
           (json-read-from-string body))
       (json-error (string-trim body)))))
 
-(defun mw-thesaurus--show (word text &optional pos reference)
+(defun mw-thesaurus--show (word text &optional pos reference no-entry)
   "Show TEXT, the entries for WORD in REFERENCE, in the current buffer.
-Put point at POS, or at the start.  REFERENCE defaults to the thesaurus."
+Put point at POS, or at the start.  REFERENCE defaults to the thesaurus.
+NO-ENTRY becomes the page's `mw-thesaurus--no-entry'."
   (let ((inhibit-read-only t))
     (erase-buffer)
     (remove-overlays (point-min) (point-max) 'mw-thesaurus t)
@@ -694,7 +700,8 @@ Put point at POS, or at the start.  REFERENCE defaults to the thesaurus."
   (mw-thesaurus-mode)
   (setq mw-thesaurus--word word
         mw-thesaurus--text text
-        mw-thesaurus--reference (or reference 'thesaurus))
+        mw-thesaurus--reference (or reference 'thesaurus)
+        mw-thesaurus--no-entry no-entry)
   ;; `org-indent-mode' indents body lines itself, on top of any spaces.
   (when (bound-and-true-p org-indent-mode)
     (mw-thesaurus--unindent))
@@ -716,9 +723,10 @@ The rest of a line's indentation, which nests list items, stays."
                (replace-match "")))
         (forward-line 1)))))
 
-(defun mw-thesaurus--create-buffer (word dict-str &optional reference)
+(defun mw-thesaurus--create-buffer (word dict-str &optional reference no-entry)
   "Show DICT-STR, the entries for WORD in REFERENCE, in the thesaurus buffer.
-The page it replaces goes to the history of `mw-thesaurus-back'."
+The page it replaces goes to the history of `mw-thesaurus-back'.
+NO-ENTRY becomes the page's `mw-thesaurus--no-entry'."
   (let ((temp-buf (get-buffer-create mw-thesaurus-buffer-name)))
     ;; The `url-retrieve' callback runs in the response buffer, not the user's.
     (unless (eq 'mw-thesaurus-mode
@@ -730,9 +738,10 @@ The page it replaces goes to the history of `mw-thesaurus-back'."
     (set-buffer temp-buf)
     (with-current-buffer temp-buf
       (when mw-thesaurus--word
-        (push (list mw-thesaurus--word mw-thesaurus--text (point) mw-thesaurus--reference)
+        (push (list mw-thesaurus--word mw-thesaurus--text (point) mw-thesaurus--reference
+                    mw-thesaurus--no-entry)
               mw-thesaurus--history))
-      (mw-thesaurus--show word dict-str nil reference))))
+      (mw-thesaurus--show word dict-str nil reference no-entry))))
 
 (defun mw-thesaurus-back ()
   "Show the entries the thesaurus buffer had before the current ones.
@@ -754,14 +763,24 @@ Point returns to where it was, and no request goes to Merriam-Webster."
   "Return how the echo area names REFERENCE."
   (if (eq reference 'dictionary) "Merriam-Webster dictionary" "Merriam-Webster"))
 
+(defun mw-thesaurus--other-reference (reference)
+  "Return the reference that is not REFERENCE; nil stands for the thesaurus."
+  (if (eq reference 'dictionary) 'thesaurus 'dictionary))
+
+(defun mw-thesaurus--key (reference)
+  "Return the API key of REFERENCE, or nil if it is empty."
+  (let ((key (if (eq reference 'dictionary)
+                 mw-thesaurus-dictionary-api-key
+               mw-thesaurus-api-key)))
+    (unless (string-empty-p (or key "")) key)))
+
 (defun mw-thesaurus--request (word reference callback)
   "Ask REFERENCE about WORD, then call CALLBACK with the parsed answer.
 A failed request, or a reply that is not JSON such as a key error, goes
 to the echo area instead."
-  (let* ((dictionary (eq reference 'dictionary))
-         (key (if dictionary mw-thesaurus-dictionary-api-key mw-thesaurus-api-key)))
-    (when (string-empty-p (or key ""))
-      (user-error "%s" (mw-thesaurus--key-help reference)))
+  (let ((dictionary (eq reference 'dictionary))
+        (key (or (mw-thesaurus--key reference)
+                 (user-error "%s" (mw-thesaurus--key-help reference)))))
     (url-retrieve
      (concat (if dictionary mw-thesaurus--dictionary-api-url mw-thesaurus--api-url)
              (url-hexify-string (mw-thesaurus--fold word)) "?key=" key)
@@ -785,46 +804,64 @@ to the echo area instead."
            (kill-buffer response))))
      nil t t)))
 
-(defun mw-thesaurus--lookup-word (word &optional reference missed-word)
+(defun mw-thesaurus--show-entries (word data reference &optional no-entry)
+  "Show the entries in DATA, REFERENCE's answer for WORD; nil if it has none.
+NO-ENTRY becomes the page's `mw-thesaurus--no-entry'."
+  (when-let* ((entries (mw-thesaurus--own-entries data word)))
+    (mw-thesaurus--create-buffer
+     word
+     (if (eq reference 'dictionary)
+         (mw-thesaurus--dictionary-parse entries)
+       (mw-thesaurus--parse entries))
+     reference no-entry)
+    t))
+
+(defun mw-thesaurus--lookup-suggestion (word reference data)
+  "Look up the first spelling suggestion in DATA, REFERENCE's answer for WORD.
+Take it only one or two edits away, at most one per two letters; else
+say that REFERENCE has no entry for WORD."
+  (let* ((suggestion (car (mw-thesaurus--suggestions data)))
+         (edits (and suggestion
+                     (string-distance (downcase word) (downcase suggestion)))))
+    (if (and suggestion (< 0 edits 3) (<= (* 2 edits) (length word)))
+        (mw-thesaurus--lookup-word suggestion reference word)
+      (message "No %s entry for \"%s\"" (mw-thesaurus--source reference) word))))
+
+(defun mw-thesaurus--lookup-word (word &optional reference missed-word fallback)
   "Look up WORD in REFERENCE, the thesaurus by default, and show its entries.
-With no entry, look up the first spelling suggestion if it is one or two
-edits away, at most one per two letters.  MISSED-WORD, the word that had
+With no entry, show the entries for WORD in FALLBACK, the other reference,
+and failing that, a spelling suggestion.  MISSED-WORD, the word that had
 no entry, goes to the echo area and prevents a second fallback."
   (let ((reference (or reference 'thesaurus)))
     (mw-thesaurus--request
      word reference
      (lambda (data)
-       (let* ((entries (mw-thesaurus--own-entries data word))
-              (suggestion (car (mw-thesaurus--suggestions data)))
-              (edits (and suggestion
-                          (string-distance (downcase word) (downcase suggestion)))))
-         (cond
-          (entries
-           (mw-thesaurus--create-buffer
-            word
-            (if (eq reference 'dictionary)
-                (mw-thesaurus--dictionary-parse entries)
-              (mw-thesaurus--parse entries))
-            reference)
-           (when missed-word
-             (message "No %s entry for \"%s\", showing \"%s\""
-                      (mw-thesaurus--source reference) missed-word word)))
-          ((and suggestion (not missed-word) (< 0 edits 3)
-                (<= (* 2 edits) (length word)))
-           (mw-thesaurus--lookup-word suggestion reference word))
-          (t
-           (message "No %s entry for \"%s\""
-                    (mw-thesaurus--source reference) (or missed-word word)))))))))
+       (cond
+        ((mw-thesaurus--show-entries word data reference)
+         (when missed-word
+           (message "No %s entry for \"%s\", showing \"%s\""
+                    (mw-thesaurus--source reference) missed-word word)))
+        (missed-word
+         (message "No %s entry for \"%s\"" (mw-thesaurus--source reference) missed-word))
+        ((and fallback (mw-thesaurus--key fallback))
+         ;; A word the other reference has is not a typo.
+         (mw-thesaurus--request
+          word fallback
+          (lambda (answer)
+            (unless (mw-thesaurus--show-entries word answer fallback reference)
+              (mw-thesaurus--lookup-suggestion word reference data)))))
+        (t (mw-thesaurus--lookup-suggestion word reference data)))))))
 
 (defun mw-thesaurus-switch-reference ()
   "Look up the word of the page in the other reference, thesaurus or dictionary."
   (interactive)
   (with-current-buffer (or (get-buffer mw-thesaurus-buffer-name)
                            (user-error "No Merriam-Webster page to switch from"))
+    (when mw-thesaurus--no-entry
+      (user-error "No %s entry for \"%s\""
+                  (mw-thesaurus--source mw-thesaurus--no-entry) mw-thesaurus--word))
     (mw-thesaurus--lookup-word mw-thesaurus--word
-                               (if (eq mw-thesaurus--reference 'dictionary)
-                                   'thesaurus
-                                 'dictionary))))
+                               (mw-thesaurus--other-reference mw-thesaurus--reference))))
 
 (defun mw-thesaurus-browse ()
   "Open the page of the thesaurus buffer on merriam-webster.com.
@@ -920,7 +957,8 @@ REFERENCE, the thesaurus by default, can also be `dictionary'."
    ;; because it doesn't produce an error in a buffer without a mark
    (if (use-region-p) (list (region-beginning) (region-end))
      (list nil nil)))
-  (mw-thesaurus--lookup-word (mw-thesaurus-get-original-word beginning end) reference))
+  (mw-thesaurus--lookup-word (mw-thesaurus-get-original-word beginning end)
+                             reference nil (mw-thesaurus--other-reference reference)))
 
 (defun mw-thesaurus--quit ()
   "Quit the selected window and kill the Merriam-Webster buffer."

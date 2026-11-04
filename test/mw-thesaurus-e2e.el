@@ -254,6 +254,32 @@ A case that expects a page expects a dictionary page.  See
       :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt) (type "lisp")
               (keys "Enter") (wait-done) (keys "o") (wait-done 6))
       :expect (:shows "^\\* lip " :reference thesaurus :echo "showing \"lip\""))
+     ("dwim, word only the dictionary has" :text "It is famously hard.\n" :point 9 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done))
+      :expect (:shows "^\\* famously " :reference dictionary :current "Dictionary"
+               :header "\\` Dictionary\\'" :windows 2 :lookups 1))
+     ("dictionary prompt, word only the thesaurus has" :text "\n" :point 1 :tags (flow)
+      :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt) (type "drain away")
+              (keys "Enter") (wait-done))
+      :expect (:shows "^\\* drain (away) " :reference thesaurus :current "Thesaurus"
+               :header "\\` Thesaurus\\'" :lookups 1))
+     ("o on a page only one reference has" :text "It is famously hard.\n" :point 9 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "o") (pause 1))
+      :expect (:shows "^\\* famously " :reference dictionary
+               :error "No Merriam-Webster entry for \"famously\"" :lookups 1))
+     ("RET from a page only one reference has" :text "It is famously hard.\n" :point 9
+      :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (search "celebrated") (keys "Enter") (wait-done 6))
+      :expect (:shows "^\\* celebrated " :reference dictionary
+               :header "\\` Thesaurus   Dictionary\\'" :lookups 2))
+     ("back to a page only one reference has" :text "It is famously hard.\n" :point 9
+      :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (search "celebrated") (keys "Enter") (wait-done 6)
+              (profile-keys ("l") ("H")) (pause 1))
+      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
+               :lookups 2))
      ("back through both references" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "o") (wait-done 6)
               (search "fortune") (keys "Enter") (wait-done 6)
@@ -411,10 +437,10 @@ A case that expects a page expects a dictionary page.  See
     (mw-e2e--word-case "word tenacity" "tenacity" :shows "^\\* tenacity " :only "tenacity")
     (mw-e2e--word-case "word run" "run" :shows "^\\* run " :only "\\<\\(run\\|ran\\)\\>")
     (mw-e2e--word-case "word good" "good" :shows "^\\* good " :only "\\<[Gg]ood\\>")
-    (mw-e2e--word-case "word Both" "Both" :no-thesaurus t
-                       :echo "No Merriam-Webster entry for \"Both\"")
-    (mw-e2e--word-case "word the" "the" :no-thesaurus t)
-    (mw-e2e--word-case "word and" "and" :no-thesaurus t)
+    (mw-e2e--word-case "word Both" "Both" :shows "^\\* both " :reference 'dictionary
+                       :header "\\` Dictionary\\'")
+    (mw-e2e--word-case "word the" "the" :shows "^\\* the " :reference 'dictionary)
+    (mw-e2e--word-case "word and" "and" :shows "^\\* and " :reference 'dictionary)
     (mw-e2e--word-case "word neither" "neither" :shows "^\\* neither " :only "neither")
     (mw-e2e--word-case "word is" "is" :shows "^\\* is " :only "\\<\\(is\\|be\\)\\>")
     (mw-e2e--word-case "typo hapy" "hapy" :shows "^\\* happy " :echo "showing \"happy\"")
@@ -424,11 +450,12 @@ A case that expects a page expects a dictionary page.  See
                        :shows "^\\* definitely " :only "\\<definite")
     (mw-e2e--word-case "typo seperate" "seperate"
                        :shows "^\\* separate " :only "separate" :echo "showing \"separate\"")
-    (mw-e2e--word-case "missing etymology" "etymology" :no-thesaurus t)
-    (mw-e2e--word-case "missing lisp" "lisp" :shows "^\\* lip " :echo "showing \"lip\"")
+    (mw-e2e--word-case "missing etymology" "etymology" :shows "^\\* etymology "
+                       :reference 'dictionary)
+    (mw-e2e--word-case "missing lisp" "lisp" :shows "^\\* lisp " :reference 'dictionary)
     (mw-e2e--word-case "gibberish" "xqzvbnwpt" :no-thesaurus t :lookups 1)
-    (mw-e2e--word-case "apostrophe don't" "don't" :shows "^\\* don " :echo "showing \"don\"")
-    (mw-e2e--word-case "apostrophe can't" "can't" :no-thesaurus t)
+    (mw-e2e--word-case "apostrophe don't" "don't" :shows "^\\* don't " :reference 'dictionary)
+    (mw-e2e--word-case "apostrophe can't" "can't" :shows "^\\* can't " :reference 'dictionary)
     (mw-e2e--word-case "hyphen well-known" "well-known"
                        :shows "^\\* well-known " :only "^\\* well-known ")
     (mw-e2e--word-case "non-ASCII café" "café" :shows "^\\* café " :only "café")
@@ -441,8 +468,8 @@ A case that expects a page expects a dictionary page.  See
     (mw-e2e--word-case "phrase giv up" "giv up" :shows "^\\* give up " :only "give up")
     (mw-e2e--word-case "sentence" "the quick brown fox jumps over the lazy dog"
                        :no-thesaurus t)
-    (mw-e2e--word-case "single letter a" "a" :no-thesaurus t)
-    (mw-e2e--word-case "single letter I" "I" :no-thesaurus t :lookups 1)
+    (mw-e2e--word-case "single letter a" "a" :shows "^\\* a " :reference 'dictionary)
+    (mw-e2e--word-case "single letter I" "I" :shows "^\\* i " :reference 'dictionary :lookups 1)
     (mw-e2e--word-case "number" "123" :no-thesaurus t)
     (mw-e2e--dictionary-case "dictionary happy" "happy" :shows "^\\* happy " :only "happy")
     (mw-e2e--dictionary-case "dictionary Happy" "Happy" :shows "^\\* happy " :only "happy")
