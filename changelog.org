@@ -3,12 +3,13 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
-* [Unreleased]
+* [2.0.1] - 2026-11-04
 
 ** Fixed
-- a word only the dictionary has, such as "famously", shows its dictionary entry, and a word only the thesaurus has, such as "drain away", its thesaurus entry, where the lookup said there was no entry
+- a word with no thesaurus entry and no close spelling, such as "famously", shows its dictionary entry, and a phrase the dictionary lacks, such as "drain away", its thesaurus entry, where the lookup said there was no entry
 - on such a page the header line names only the reference shown, and ~o~ says the other one has no entry
-- that entry comes before a spelling suggestion, so "lisp" no longer shows "lip", nor "don't" "don"
+- the late answer of an earlier lookup no longer replaces the page, nor brings back a page left with ~l~ or ~q~
+- a failed request shows its error instead of "no entry", and a refused connection shows one error
 
 * [2.0.0] - 2026-11-03
 
