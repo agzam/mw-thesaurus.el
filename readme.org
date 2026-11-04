@@ -67,7 +67,8 @@ Doom binds ~RET~ in Org buffers to ~+org/dwim-at-point~ through ~evil-org-mode-m
 
 ~mw-thesaurus-dictionary-lookup-dwim~ - the same for the Collegiate Dictionary: pronunciation, inflections, numbered senses with examples, and the word's history. Dictionary pages show in the same buffer.
 
-If the word has no entry, e.g. because of a typo, the first spelling suggestion from Merriam-Webster shows instead, but only when it differs by one or two letters, and in no more than half of the word: "hapy" shows "happy", while "etymology" shows nothing rather than "homology", and "I" nothing rather than "GI".
+If the word has no entry, e.g. because of a typo, the first spelling suggestion shows instead.
+
 * Keys available in mw-thesaurus-mode
 The header line names both references, Thesaurus and Dictionary, and marks the one shown; a click on the other one switches.
 
