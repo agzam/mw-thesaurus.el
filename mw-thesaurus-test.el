@@ -213,6 +213,10 @@ Only WORDS have entries.  Any other word gets SUGGESTIONS."
       (mw-thesaurus-test--entries (list word word))
     (json-encode (vconcat suggestions))))
 
+(defun mw-thesaurus-test--entry (word)
+  "Return the body of a response with an entry for WORD."
+  (mw-thesaurus-test--entries (list word word)))
+
 (defun mw-thesaurus-test--fake-api (respond)
   "Return a fake `url-retrieve' that answers with RESPOND.
 RESPOND takes the requested word and returns the response body, or an
@@ -225,18 +229,25 @@ error for the callback status."
           (mw-thesaurus-test--insert-response body))
         (funcall callback (unless (stringp body) (list :error body)))))))
 
-(defun mw-thesaurus-test--call (respond lookup-fn)
+(defun mw-thesaurus-test--call (respond lookup-fn &optional dictionary)
   "Call LOOKUP-FN against a fake Merriam-Webster API.
-RESPOND takes the requested word and returns the response body, or an
-error for the callback status.  Return a plist of the request URLs, the
-words, texts and references sent to the buffer and the echo area messages."
+RESPOND, or DICTIONARY for the dictionary's requests if given, takes the
+requested word and returns the body or an error for the callback status.
+Return a plist of the request URLs, what went to the buffer, and messages."
   (let ((api (mw-thesaurus-test--fake-api respond))
-        urls words rendered references messages)
+        (dictionary-api (and dictionary (mw-thesaurus-test--fake-api dictionary)))
+        urls words rendered references no-entries messages)
     (cl-letf (((symbol-function 'url-retrieve)
-               (lambda (url &rest args) (push url urls) (apply api url args)))
+               (lambda (url &rest args)
+                 (push url urls)
+                 (apply (if (and dictionary-api (string-match-p "/collegiate/" url))
+                            dictionary-api
+                          api)
+                        url args)))
               ((symbol-function 'mw-thesaurus--create-buffer)
-               (lambda (word dict-str &optional reference)
-                 (push word words) (push dict-str rendered) (push reference references)))
+               (lambda (word dict-str &optional reference no-entry)
+                 (push word words) (push dict-str rendered) (push reference references)
+                 (push no-entry no-entries)))
               ((symbol-function 'message)
                (lambda (fmt &rest args) (push (apply #'format fmt args) messages))))
       (funcall lookup-fn))
@@ -244,11 +255,13 @@ words, texts and references sent to the buffer and the echo area messages."
           :words (nreverse words)
           :rendered (nreverse rendered)
           :references (nreverse references)
+          :no-entries (nreverse no-entries)
           :messages (nreverse messages))))
 
 (defun mw-thesaurus-test--lookup (words suggestions lookup-fn)
   "Call LOOKUP-FN against a fake API where only WORDS have entries.
-Other words get SUGGESTIONS.  See `mw-thesaurus-test--call'."
+Other words get SUGGESTIONS, from both references, so a miss also asks
+the other one.  See `mw-thesaurus-test--call'."
   (mw-thesaurus-test--call
    (lambda (word) (mw-thesaurus-test--response word words suggestions))
    lookup-fn))
@@ -265,12 +278,16 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
        (lambda () (mw-thesaurus-lookup (region-beginning) (region-end)))))))
 
 (ert-deftest mw-thesaurus-lookup-shows-first-suggestion-test ()
-  (let ((result (mw-thesaurus-test--lookup-region
-                 "hapy" '("happy") '("happy" "hap"))))
-    (should (equal 2 (length (plist-get result :urls))))
+  (let* ((result (mw-thesaurus-test--lookup-region
+                  "hapy" '("happy") '("happy" "hap")))
+         (urls (plist-get result :urls)))
+    ;; A suggestion with entries comes before the other reference.
+    (should (equal 2 (length urls)))
+    (should (string-match-p "/thesaurus/json/happy\\?" (nth 1 urls)))
     (should (string-prefix-p "* happy ~verb~"
                              (car (plist-get result :rendered))))
     (should (equal '("happy") (plist-get result :words)))
+    (should (equal '(thesaurus) (plist-get result :references)))
     (should (equal '("No Merriam-Webster entry for \"hapy\", showing \"happy\"")
                    (plist-get result :messages)))))
 
@@ -284,14 +301,14 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
 (ert-deftest mw-thesaurus-lookup-ignores-distant-suggestion-test ()
   (let ((result (mw-thesaurus-test--lookup-region
                  "weakest" '("recast") '("recast" "latest"))))
-    (should (equal 1 (length (plist-get result :urls))))
+    (should (equal 2 (length (plist-get result :urls))))
     (should-not (plist-get result :rendered))
     (should (equal '("No Merriam-Webster entry for \"weakest\"")
                    (plist-get result :messages)))))
 
 (ert-deftest mw-thesaurus-lookup-ignores-suggestions-for-one-letter-test ()
   (let ((result (mw-thesaurus-test--lookup-region "I" '("gi") '("gi" "GI" "is"))))
-    (should (equal 1 (length (plist-get result :urls))))
+    (should (equal 2 (length (plist-get result :urls))))
     (should-not (plist-get result :rendered))
     (should (equal '("No Merriam-Webster entry for \"I\"")
                    (plist-get result :messages)))))
@@ -304,20 +321,20 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
 (ert-deftest mw-thesaurus-lookup-ignores-the-same-word-test ()
   (let ((result (mw-thesaurus-test--lookup-region
                  "Tenacity" nil '("tenacity" "tenacious"))))
-    (should (equal 1 (length (plist-get result :urls))))
+    (should (equal 2 (length (plist-get result :urls))))
     (should (equal '("No Merriam-Webster entry for \"Tenacity\"")
                    (plist-get result :messages)))))
 
 (ert-deftest mw-thesaurus-lookup-without-suggestions-test ()
   (let ((result (mw-thesaurus-test--lookup-region "xqzvbnwpt" nil nil)))
-    (should (equal 1 (length (plist-get result :urls))))
+    (should (equal 2 (length (plist-get result :urls))))
     (should-not (plist-get result :rendered))
     (should (equal '("No Merriam-Webster entry for \"xqzvbnwpt\"")
                    (plist-get result :messages)))))
 
 (ert-deftest mw-thesaurus-lookup-falls-back-only-once-test ()
   (let ((result (mw-thesaurus-test--lookup-region "hapy" nil '("happy"))))
-    (should (equal 2 (length (plist-get result :urls))))
+    (should (equal 3 (length (plist-get result :urls))))
     (should-not (plist-get result :rendered))
     (should (equal '("No Merriam-Webster entry for \"hapy\"")
                    (plist-get result :messages)))))
@@ -501,6 +518,119 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (should (equal '("Merriam-Webster dictionary: Invalid API key. Not subscribed for this reference.  Set `mw-thesaurus-dictionary-api-key' to a Collegiate Dictionary key from https://dictionaryapi.com")
                    (plist-get result :messages)))))
 
+(defun mw-thesaurus-test--prompt (word command thesaurus dictionary)
+  "Type WORD at the prompt of COMMAND, called in an empty buffer.
+THESAURUS and DICTIONARY answer each reference's requests, see
+`mw-thesaurus-test--call'."
+  (with-temp-buffer
+    (cl-letf (((symbol-function 'read-string) (lambda (&rest _) word)))
+      (mw-thesaurus-test--call thesaurus command dictionary))))
+
+(ert-deftest mw-thesaurus-lookup-dwim-shows-the-dictionary-test ()
+  (with-temp-buffer
+    (insert "famously")
+    (goto-char 3)
+    ;; The API's answer; "fancily" is 4 edits from "famously".
+    (let* ((result (mw-thesaurus-test--call (lambda (_) "[\"fancily\",\"infamously\"]")
+                                            #'mw-thesaurus-lookup-dwim
+                                            #'mw-thesaurus-test--entry))
+           (urls (plist-get result :urls)))
+      (should (equal 2 (length urls)))
+      (should (string-match-p "/thesaurus/json/famously\\?" (nth 0 urls)))
+      (should (string-match-p "/collegiate/json/famously\\?" (nth 1 urls)))
+      (should (equal '("famously") (plist-get result :words)))
+      (should (equal '(dictionary) (plist-get result :references)))
+      (should (equal '(thesaurus) (plist-get result :no-entries)))
+      (should-not (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-dictionary-lookup-shows-the-thesaurus-test ()
+  (let* ((result (mw-thesaurus-test--prompt
+                  "drain away" #'mw-thesaurus-dictionary-lookup-dwim
+                  #'mw-thesaurus-test--entry (lambda (_) "[\"dream away\",\"drawn away\"]")))
+         (urls (plist-get result :urls)))
+    (should (equal 2 (length urls)))
+    (should (string-match-p "/collegiate/json/drain%20away\\?" (nth 0 urls)))
+    (should (string-match-p "/thesaurus/json/drain%20away\\?" (nth 1 urls)))
+    (should (equal '(thesaurus) (plist-get result :references)))
+    (should (equal '(dictionary) (plist-get result :no-entries)))
+    (should-not (plist-get result :messages))))
+
+(ert-deftest mw-thesaurus-lookup-prefers-a-suggestion-to-the-other-reference-test ()
+  ;; Synonyms of the closest word come before a definition of the word.
+  (let* ((result (mw-thesaurus-test--prompt
+                  "notoriously" #'mw-thesaurus-lookup-dwim
+                  (lambda (word)
+                    (if (equal word "notorious")
+                        (mw-thesaurus-test--entry word)
+                      "[\"notorious\",\"notoriety\"]"))
+                  #'mw-thesaurus-test--entry))
+         (urls (plist-get result :urls)))
+    (should (equal 2 (length urls)))
+    (should (string-match-p "/thesaurus/json/notorious\\?" (nth 1 urls)))
+    (should (equal '("notorious") (plist-get result :words)))
+    (should (equal '(thesaurus) (plist-get result :references)))
+    (should (equal '(nil) (plist-get result :no-entries)))
+    (should (equal '("No Merriam-Webster entry for \"notoriously\", showing \"notorious\"")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-lookup-asks-the-other-reference-after-the-suggestion-test ()
+  ;; The thesaurus has neither "lisp" nor its suggestion "lip" here.
+  (let* ((result (mw-thesaurus-test--prompt
+                  "lisp" #'mw-thesaurus-lookup-dwim
+                  (lambda (_) "[\"lip\",\"list\"]") #'mw-thesaurus-test--entry))
+         (urls (plist-get result :urls)))
+    (should (equal 3 (length urls)))
+    (should (string-match-p "/thesaurus/json/lisp\\?" (nth 0 urls)))
+    (should (string-match-p "/thesaurus/json/lip\\?" (nth 1 urls)))
+    (should (string-match-p "/collegiate/json/lisp\\?" (nth 2 urls)))
+    (should (equal '("lisp") (plist-get result :words)))
+    (should (equal '(dictionary) (plist-get result :references)))
+    (should (equal '(thesaurus) (plist-get result :no-entries)))
+    (should-not (plist-get result :messages))))
+
+(ert-deftest mw-thesaurus-lookup-ends-on-the-error-of-a-failed-request-test ()
+  ;; A failed request confirms no miss, so its error is the last word.
+  (dolist (case
+           `((mw-thesaurus-lookup-dwim
+              "famously" ,(lambda (_) "[\"fancily\"]")
+              ,(lambda (_) "Invalid API key. Not subscribed for this reference.")
+              "Merriam-Webster dictionary: Invalid API key. Not subscribed for this reference.  Set `mw-thesaurus-dictionary-api-key' to a Collegiate Dictionary key from https://dictionaryapi.com")
+             (mw-thesaurus-lookup-dwim
+              "famously" ,(lambda (_) "[\"fancily\"]") ,(lambda (_) '(error http 503))
+              "Merriam-Webster dictionary request failed: (error http 503)")
+             (mw-thesaurus-lookup-dwim
+              "hapy" ,(lambda (word) (if (equal word "hapy") "[\"happy\"]" '(error http 503)))
+              mw-thesaurus-test--entry
+              "Merriam-Webster request failed: (error http 503)")
+             (mw-thesaurus-dictionary-lookup-dwim
+              "drain away" ,(lambda (_) "Invalid API key. Not subscribed for this reference.")
+              ,(lambda (_) "[\"dream away\"]")
+              "Merriam-Webster: Invalid API key. Not subscribed for this reference.  Set `mw-thesaurus-api-key' to a Collegiate Thesaurus key from https://dictionaryapi.com")))
+    (pcase-let* ((`(,command ,word ,thesaurus ,dictionary ,error) case)
+                 (result (mw-thesaurus-test--prompt word command thesaurus dictionary)))
+      (should-not (plist-get result :rendered))
+      (should (equal (list error) (plist-get result :messages))))))
+
+(ert-deftest mw-thesaurus-lookup-reports-an-answer-of-another-shape-test ()
+  ;; Merriam-Webster documents no answer for a key past its daily quota.
+  (let ((result (mw-thesaurus-test--call
+                 (lambda (_) "{\"error\":\"Key over its daily limit\"}")
+                 (lambda () (mw-thesaurus--lookup-word "happy" nil nil 'dictionary)))))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should-not (plist-get result :rendered))
+    (should (equal '("Merriam-Webster: {\"error\":\"Key over its daily limit\"}")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-lookup-without-the-other-key-test ()
+  (let* ((mw-thesaurus-dictionary-api-key nil)
+         (result (mw-thesaurus-test--prompt
+                  "famously" #'mw-thesaurus-lookup-dwim
+                  (lambda (_) "[\"fancily\"]") #'mw-thesaurus-test--entry)))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should-not (plist-get result :rendered))
+    (should (equal '("No Merriam-Webster entry for \"famously\"")
+                   (plist-get result :messages)))))
+
 (ert-deftest mw-thesaurus-lookup-dwim-prompts-on-an-empty-line-test ()
   (with-temp-buffer
     (insert "\n")
@@ -517,7 +647,7 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (setq-local mw-thesaurus--reference 'dictionary)
     (goto-char 5)
     (let ((result (mw-thesaurus-test--call
-                   (lambda (_) "[]")
+                   #'mw-thesaurus-test--entry
                    (lambda ()
                      (call-interactively #'mw-thesaurus-lookup-at-point)
                      (mw-thesaurus-lookup-dwim)))))
@@ -583,6 +713,96 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
       (mw-thesaurus--request "happy" 'thesaurus (lambda (_) (setq seen (current-buffer)))))
     (should (eq response seen))
     (should-not (buffer-live-p response))))
+
+(ert-deftest mw-thesaurus--request-answers-once-test ()
+  ;; url.el calls back again as it deletes the process of a refused connection.
+  (let (messages)
+    (cl-letf (((symbol-function 'url-retrieve)
+               (lambda (_url callback &rest _)
+                 (with-current-buffer (generate-new-buffer " *mw-test*")
+                   (let (deleted)
+                     (add-hook 'kill-buffer-hook
+                               (lambda ()
+                                 (unless deleted
+                                   (setq deleted t)
+                                   (funcall callback '(:error (error connection-failed "deleted\n")))))
+                               nil t))
+                   (funcall callback '(:error (error connection-failed "failed with code 61\n"))))))
+              ((symbol-function 'message)
+               (lambda (fmt &rest args) (push (apply #'format fmt args) messages))))
+      (mw-thesaurus--request "happy" 'thesaurus #'ignore))
+    (should (equal '("Merriam-Webster request failed: (error connection-failed \"failed with code 61\n\")")
+                   messages))))
+
+(defun mw-thesaurus-test--held (steps)
+  "Return a LOOKUP-FN for `mw-thesaurus-test--call' whose requests wait.
+`url-retrieve' keeps each request; STEPS gets ANSWER, a function that
+answers the kept request whose URL matches a regexp."
+  (lambda ()
+    (let ((answer-now (symbol-function 'url-retrieve))
+          held)
+      (cl-letf (((symbol-function 'url-retrieve)
+                 (lambda (&rest args) (setq held (append held (list args))))))
+        (funcall steps
+                 (lambda (regexp)
+                   (let ((request (or (seq-find (lambda (args) (string-match-p regexp (car args)))
+                                                held)
+                                      (error "No request matches %s" regexp))))
+                     (setq held (delq request held))
+                     (apply answer-now request))))))))
+
+(ert-deftest mw-thesaurus-lookup-drops-the-answer-of-an-earlier-lookup-test ()
+  (let ((result (mw-thesaurus-test--call
+                 #'mw-thesaurus-test--entry
+                 (mw-thesaurus-test--held
+                  (lambda (answer)
+                    (mw-thesaurus--lookup-word "happy")
+                    (mw-thesaurus--lookup-word "sad")
+                    (funcall answer "/happy\\?")
+                    (funcall answer "/sad\\?"))))))
+    (should (equal '("sad") (plist-get result :words)))))
+
+(ert-deftest mw-thesaurus-lookup-drops-a-late-page-of-the-other-reference-test ()
+  (let ((result (mw-thesaurus-test--call
+                 (lambda (word)
+                   (if (equal word "happy") (mw-thesaurus-test--entry word) "[\"fancily\"]"))
+                 (mw-thesaurus-test--held
+                  (lambda (answer)
+                    (mw-thesaurus--lookup-word "famously" nil nil 'dictionary)
+                    (funcall answer "/thesaurus/json/famously\\?")
+                    (mw-thesaurus--lookup-word "happy" nil nil 'dictionary)
+                    (funcall answer "/thesaurus/json/happy\\?")
+                    (funcall answer "/collegiate/json/famously\\?")))
+                 #'mw-thesaurus-test--entry)))
+    (should (equal '("happy") (plist-get result :words)))
+    (should-not (plist-get result :messages))))
+
+(ert-deftest mw-thesaurus-lookup-drops-a-late-suggestion-of-an-earlier-lookup-test ()
+  (let ((result (mw-thesaurus-test--call
+                 (lambda (word)
+                   (if (equal word "hapy") "[\"happy\"]" (mw-thesaurus-test--entry word)))
+                 (mw-thesaurus-test--held
+                  (lambda (answer)
+                    (mw-thesaurus--lookup-word "hapy")
+                    (funcall answer "/hapy\\?")
+                    (mw-thesaurus--lookup-word "sad")
+                    (funcall answer "/sad\\?")
+                    (funcall answer "/happy\\?"))))))
+    (should (equal '("sad") (plist-get result :words)))
+    (should-not (plist-get result :messages))))
+
+(ert-deftest mw-thesaurus-lookup-drops-a-late-error-of-an-earlier-lookup-test ()
+  (let ((result (mw-thesaurus-test--call
+                 (lambda (word)
+                   (if (equal word "happy") '(error http 503) (mw-thesaurus-test--entry word)))
+                 (mw-thesaurus-test--held
+                  (lambda (answer)
+                    (mw-thesaurus--lookup-word "happy")
+                    (mw-thesaurus--lookup-word "sad")
+                    (funcall answer "/sad\\?")
+                    (funcall answer "/happy\\?"))))))
+    (should (equal '("sad") (plist-get result :words)))
+    (should-not (plist-get result :messages))))
 
 (ert-deftest mw-thesaurus-mode-map-key-of-ones-own-wins-test ()
   (let ((mw-thesaurus-mode-map (copy-keymap mw-thesaurus-mode-map)))
@@ -686,6 +906,15 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
                     (lookup-key (get-text-property other 'local-map line)
                                 [header-line mouse-1])))))))
 
+(ert-deftest mw-thesaurus-header-line-leaves-out-a-reference-without-the-word-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    (setq mw-thesaurus--reference 'dictionary
+          mw-thesaurus--no-entry 'thesaurus)
+    (let ((line (mw-thesaurus--header-line)))
+      (should (equal " Dictionary" (substring-no-properties line)))
+      (should (eq 'bold (get-text-property 1 'face line))))))
+
 (ert-deftest mw-thesaurus-mode-keeps-org-overriding-maps-test ()
   (let ((org-modes (with-temp-buffer
                      (org-mode)
@@ -700,7 +929,8 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
   (should (equal "* Merriam-Webster *" mw-thesaurus-buffer-name)))
 
 (defun mw-thesaurus-test--pages (&rest pages)
-  "Show PAGES, each (WORD TEXT), in a thesaurus buffer that no window shows."
+  "Show PAGES in a thesaurus buffer that no window shows.
+Each page is the arguments of `mw-thesaurus--create-buffer'."
   (cl-letf (((symbol-function 'switch-to-buffer-other-window) #'ignore))
     (dolist (page pages)
       ;; `mw-thesaurus--create-buffer' makes its buffer current.
@@ -799,6 +1029,8 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
                                                  #'mw-thesaurus-switch-reference)))
             (should (string-match-p "/thesaurus/json/decline\\?"
                                     (car (plist-get result :urls))))
+            ;; The buffer shows the dictionary's entry already.
+            (should (equal 1 (length (plist-get result :urls))))
             ;; A miss keeps the page.
             (should (equal '("No Merriam-Webster entry for \"decline\"")
                            (plist-get result :messages))))
@@ -809,6 +1041,72 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
 (ert-deftest mw-thesaurus-switch-reference-needs-a-page-test ()
   (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test-none*"))
     (should-error (mw-thesaurus-switch-reference) :type 'user-error)))
+
+(ert-deftest mw-thesaurus-switch-reference-without-the-other-entry-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (progn
+          (mw-thesaurus-test--pages '("famously" "* famously ~adverb~\n" dictionary thesaurus))
+          (let ((result (mw-thesaurus-test--call
+                         #'mw-thesaurus-test--entry
+                         (lambda ()
+                           (should (equal '(user-error "No Merriam-Webster entry for \"famously\"")
+                                          (should-error (mw-thesaurus-switch-reference)
+                                                        :type 'user-error)))))))
+            (should-not (plist-get result :urls))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-back-to-a-page-without-the-other-entry-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (progn
+          (mw-thesaurus-test--pages '("famously" "* famously ~adverb~\n" dictionary thesaurus)
+                                    '("celebrated" "* celebrated ~adjective~\n" dictionary))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should (equal " Thesaurus   Dictionary"
+                           (substring-no-properties (mw-thesaurus--header-line))))
+            (mw-thesaurus-back)
+            (should (equal "famously" mw-thesaurus--word))
+            (should (equal " Dictionary"
+                           (substring-no-properties (mw-thesaurus--header-line))))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-back-drops-a-pending-answer-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (progn
+          (mw-thesaurus-test--pages '("happy" "* happy ~adjective~\n")
+                                    '("glad" "* glad ~adjective~\n"))
+          (let ((result (mw-thesaurus-test--call
+                         #'mw-thesaurus-test--entry
+                         (mw-thesaurus-test--held
+                          (lambda (answer)
+                            (mw-thesaurus--lookup-word "joyful")
+                            (with-current-buffer mw-thesaurus-buffer-name
+                              (mw-thesaurus-back))
+                            (funcall answer "/joyful\\?"))))))
+            (should-not (plist-get result :words)))
+          (with-current-buffer mw-thesaurus-buffer-name
+            (should (equal "happy" mw-thesaurus--word))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-quit-drops-a-pending-answer-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (progn
+          (mw-thesaurus-test--pages '("happy" "* happy ~adjective~\n"))
+          (let ((result (mw-thesaurus-test--call
+                         #'mw-thesaurus-test--entry
+                         (mw-thesaurus-test--held
+                          (lambda (answer)
+                            (mw-thesaurus--lookup-word "glad")
+                            (cl-letf (((symbol-function 'quit-window) #'ignore))
+                              (mw-thesaurus--quit))
+                            (funcall answer "/glad\\?"))))))
+            (should-not (plist-get result :words))
+            (should-not (get-buffer mw-thesaurus-buffer-name))))
+      (when (get-buffer mw-thesaurus-buffer-name)
+        (kill-buffer mw-thesaurus-buffer-name)))))
 
 (ert-deftest mw-thesaurus--audio-url-test ()
   (dolist (case '(("declin03" . "d/declin03") ("bixcow04" . "bix/bixcow04")
@@ -1100,6 +1398,21 @@ Return what `mw-thesaurus-test--call' returns, plus the recordings played."
     (should-not (plist-get result :played))
     (should (string-match-p "\\`Merriam-Webster dictionary request failed"
                             (car (plist-get result :messages))))))
+
+(ert-deftest mw-thesaurus--entry-audio-outlives-a-later-lookup-test ()
+  (let ((mw-thesaurus--entry-recordings (make-hash-table :test #'equal))
+        (mw-thesaurus-audio-player '("true"))
+        played)
+    (cl-letf (((symbol-function 'mw-thesaurus--play)
+               (lambda (audio &rest _) (push audio played))))
+      (mw-thesaurus-test--call
+       (lambda (_) (mw-thesaurus-test--asset "dictionary-decline.json"))
+       (mw-thesaurus-test--held
+        (lambda (answer)
+          (mw-thesaurus--entry-audio (concat mw-thesaurus-test--decline-verb ":decline"))
+          (mw-thesaurus--lookup-word "happy")
+          (funcall answer "/collegiate/json/decline\\?")))))
+    (should (equal '("declin03") played))))
 
 (ert-deftest mw-thesaurus--entry-audio-needs-a-player-and-a-key-test ()
   (let ((mw-thesaurus--entry-recordings (make-hash-table :test #'equal))
