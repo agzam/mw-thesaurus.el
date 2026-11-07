@@ -166,7 +166,8 @@ Each profile copies the readme or a public config that sets up mw-thesaurus."
             (lambda (orig format-string &rest args)
               (when (stringp format-string)
                 (let ((text (ignore-errors (apply #'format-message format-string args))))
-                  (when (and text (string-match-p "Merriam-Webster\\|REQUEST\\|[Ee]rror" text))
+                  (when (and text (string-match-p
+                                   "Merriam-Webster\\|Synonym Chooser\\|REQUEST\\|[Ee]rror" text))
                     (mw-e2e--log 'outcome text))))
               (apply orig format-string args))
             '((name . mw-e2e)))
@@ -188,6 +189,13 @@ Each profile copies the readme or a public config that sets up mw-thesaurus."
 (load (expand-file-name "mw-thesaurus-e2e-cache.el" (file-name-directory load-file-name))
       nil t)
 (setq mw-e2e-cache-log #'mw-e2e--log)
+
+;; A switch between tabs may skip `mw-thesaurus--lookup-word' and still ask the API.
+(advice-add 'url-retrieve :before
+            (lambda (url &rest _)
+              (when (string-match-p "\\`https://www\\.dictionaryapi\\.com/api/" url)
+                (mw-e2e--log 'request (mw-e2e--sans-key url))))
+            '((name . mw-e2e)))
 
 (advice-add 'make-process :before
             (lambda (&rest args)
@@ -306,7 +314,7 @@ Each profile copies the readme or a public config that sets up mw-thesaurus."
                                (seq-find (lambda (label)
                                            (when-let* ((at (mw-e2e--search label line)))
                                              (eq 'bold (get-text-property at 'face line))))
-                                         '("Thesaurus" "Dictionary")))
+                                         '("Thesaurus" "Dictionary" "Synonym Chooser")))
                     :hidden (save-excursion
                               (goto-char (point-min))
                               (let ((n 0))
@@ -336,6 +344,7 @@ Each profile copies the readme or a public config that sets up mw-thesaurus."
           :layout (mapcar (lambda (w) (cons (buffer-name (window-buffer w)) (window-edges w)))
                           (window-list nil 'never))
           :lookups (mw-e2e--texts 'lookup)
+          :requests (mw-e2e--texts 'request)
           :fetches (mw-e2e--texts 'fetch)
           :cached (mw-e2e--texts 'cached)
           :warnings (mw-e2e--texts 'warning)

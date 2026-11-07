@@ -79,48 +79,79 @@ types these keys, and evil's keys work as in any buffer.")
 The buffer's own text can lose the indentation and faces of the page.")
 
 (defvar-local mw-thesaurus--reference 'thesaurus
-  "The reference of the page the buffer shows, `thesaurus' or `dictionary'.")
+  "The tab of the page the buffer shows, one of `mw-thesaurus--tabs'.")
 
 (defvar-local mw-thesaurus--no-entry nil
   "The other reference if it has no entry for the word of the page, else nil.")
 
+(defvar-local mw-thesaurus--dictionary-entries nil
+  "The dictionary's entries for the word of the page as (WORD . ENTRIES).
+nil until the page asks the dictionary.")
+
 (defvar-local mw-thesaurus--history nil
   "Pages the thesaurus buffer showed before the current one, newest first.
-Each page is a list (WORD TEXT POINT REFERENCE NO-ENTRY).")
+Each page is a list (WORD TEXT POINT REFERENCE NO-ENTRY DICTIONARY).")
 
 ;; Showing a page reruns `mw-thesaurus-mode', which kills buffer-local variables.
 (put 'mw-thesaurus--word 'permanent-local t)
 (put 'mw-thesaurus--text 'permanent-local t)
 (put 'mw-thesaurus--reference 'permanent-local t)
 (put 'mw-thesaurus--no-entry 'permanent-local t)
+(put 'mw-thesaurus--dictionary-entries 'permanent-local t)
 (put 'mw-thesaurus--history 'permanent-local t)
 
 (defvar mw-thesaurus--lookups 0
   "The count of lookups started; a request carries its lookup's count.
-A later lookup, going back and quitting raise it, so an answer that comes
-after one of them is dropped.")
+A later lookup, a tab switch, going back and quitting raise it, so an
+answer that comes after one of them is dropped.")
+
+(defconst mw-thesaurus--tabs
+  '(thesaurus "Thesaurus" dictionary "Dictionary" synonym-chooser "Synonym Chooser")
+  "The tabs of the header line in order, each followed by its label.
+The Synonym Chooser shows how the dictionary tells close synonyms apart.")
 
 (defvar mw-thesaurus--header-line-map
   (let ((map (make-sparse-keymap)))
     (define-key map [header-line mouse-1] #'mw-thesaurus-switch-reference)
     map)
-  "Keymap of the other reference's label in the header line.")
+  "Keymap of the labels of the other tabs in the header line.")
+
+(defun mw-thesaurus--page-tabs ()
+  "Return the tabs the page shows, in the order of `mw-thesaurus--tabs'.
+It leaves out `mw-thesaurus--no-entry', and the Synonym Chooser when the
+dictionary has no entry for the word or no synonym discussion."
+  (seq-remove
+   (lambda (tab)
+     (or (eq tab mw-thesaurus--no-entry)
+         (and (eq tab 'synonym-chooser)
+              (or (eq mw-thesaurus--no-entry 'dictionary)
+                  (and mw-thesaurus--dictionary-entries
+                       (not (mw-thesaurus--discussed
+                             (cdr mw-thesaurus--dictionary-entries))))))))
+   (seq-filter #'symbolp mw-thesaurus--tabs)))
 
 (defun mw-thesaurus--header-line ()
-  "Return the header line: both references, the one shown in bold.
-It leaves out `mw-thesaurus--no-entry', which has no entry for the word."
+  "Return the header line: the tabs of the page, the one shown in bold.
+A click on another label shows its tab, which the label carries."
   (concat " "
           (mapconcat
-           (lambda (reference)
-             (let ((label (capitalize (symbol-name reference))))
-               (if (eq reference mw-thesaurus--reference)
+           (lambda (tab)
+             (let ((label (plist-get mw-thesaurus--tabs tab)))
+               (if (eq tab mw-thesaurus--reference)
                    (propertize label 'face 'bold)
                  (propertize label
                              'face 'shadow
                              'mouse-face 'header-line-highlight
-                             'help-echo (format "mouse-1: show the word in the %s" reference)
+                             'help-echo (format "mouse-1: show the word in the %s" label)
+                             'mw-thesaurus-tab tab
                              'local-map mw-thesaurus--header-line-map))))
-           (remq mw-thesaurus--no-entry '(thesaurus dictionary)) "   ")))
+           (mw-thesaurus--page-tabs) "   ")))
+
+(defun mw-thesaurus--clicked-tab (event)
+  "Return the tab of the header-line label that EVENT clicked, or nil."
+  (when-let* (((mouse-event-p event))
+              (string (posn-string (event-start event))))
+    (get-text-property (cdr string) 'mw-thesaurus-tab (car string))))
 
 (defun mw-thesaurus--read-only-keys ()
   "Return `mw-thesaurus-read-only-map' less the keys bound in the mode map.
@@ -145,6 +176,9 @@ On a read-only page:
 \\{mw-thesaurus-read-only-map}"
   :group 'mw-thesaurus
   (setq-local org-hide-emphasis-markers t)
+  ;; `org-startup-truncated' cuts lines off, and a paragraph is one line.
+  (setq-local truncate-lines nil)
+  (setq-local word-wrap t)
   ;; As in `diff-mode', single keys act only while the page is read-only.
   (setq-local minor-mode-overriding-map-alist
               (cons (cons 'buffer-read-only (mw-thesaurus--read-only-keys))
@@ -457,25 +491,61 @@ A pronunciation with a recording is a link that plays it."
               (when date
                 (concat "   First known use: " (mw-thesaurus--dictionary-text date) "\n"))))))
 
-(defun mw-thesaurus--dictionary-entry (entry)
-  "Format ENTRY, a parsed Collegiate Dictionary entry, as an Org subtree."
+(defun mw-thesaurus--dictionary-heading (entry)
+  "Return the Org heading of ENTRY, a dictionary entry: headword and function."
   (let ((function (alist-get 'fl entry)))
     (concat "* " (replace-regexp-in-string "\\*" "" (alist-get 'hw (alist-get 'hwi entry)))
             (when function (concat " ~" function "~"))
-            "\n"
-            (mw-thesaurus--dictionary-headlines entry)
-            (mapconcat (lambda (cognate)
-                         (concat "  " (alist-get 'cxl cognate) " "
-                                 (mapconcat (lambda (target) (alist-get 'cxt target))
-                                            (alist-get 'cxtis cognate) ", ")
-                                 "\n"))
-                       (alist-get 'cxs entry) "")
-            (mapconcat #'mw-thesaurus--dictionary-def (alist-get 'def entry) "")
-            (mw-thesaurus--dictionary-history entry))))
+            "\n")))
+
+(defun mw-thesaurus--dictionary-entry (entry)
+  "Format ENTRY, a parsed Collegiate Dictionary entry, as an Org subtree."
+  (concat (mw-thesaurus--dictionary-heading entry)
+          (mw-thesaurus--dictionary-headlines entry)
+          (mapconcat (lambda (cognate)
+                       (concat "  " (alist-get 'cxl cognate) " "
+                               (mapconcat (lambda (target) (alist-get 'cxt target))
+                                          (alist-get 'cxtis cognate) ", ")
+                               "\n"))
+                     (alist-get 'cxs entry) "")
+          (mapconcat #'mw-thesaurus--dictionary-def (alist-get 'def entry) "")
+          (mw-thesaurus--dictionary-history entry)))
 
 (defun mw-thesaurus--dictionary-parse (data)
   "Format the entries in DATA, a parsed dictionary response, as Org text."
   (mapconcat #'mw-thesaurus--dictionary-entry (seq-filter #'consp data) ""))
+
+(defun mw-thesaurus--discussed (entries)
+  "Return the dictionary ENTRIES that discuss their synonyms."
+  (seq-filter (lambda (entry) (alist-get 'syns entry)) entries))
+
+(defun mw-thesaurus--small-caps (text)
+  "Return TEXT with its small capitals in italics, a run of them as a list.
+A synonym discussion sets the words it compares in small capitals."
+  (replace-regexp-in-string
+   "{\\(/?\\)sc}" "{\\1it}"
+   (replace-regexp-in-string "{/sc} +{sc}" "{/sc}, {sc}" text)))
+
+(defun mw-thesaurus--chooser-parse (entries)
+  "Format the synonym discussions of the dictionary ENTRIES as Org text.
+Each entry with one is a heading; its examples sit deeper than its text."
+  (mapconcat
+   (lambda (entry)
+     (concat
+      (mw-thesaurus--dictionary-heading entry)
+      (mapconcat
+       (lambda (part)
+         (concat (if (eq 'text (car part)) "  " "    ") (cdr part) "\n"))
+       (mw-thesaurus--dictionary-dt
+        (seq-mapcat (lambda (discussion)
+                      (mapcar (lambda (part)
+                                (if (equal "text" (car part))
+                                    (list "text" (mw-thesaurus--small-caps (cadr part)))
+                                  part))
+                              (alist-get 'pt discussion)))
+                    (alist-get 'syns entry)))
+       "")))
+   (mw-thesaurus--discussed entries) ""))
 
 (defun mw-thesaurus--audio-url (audio)
   "Return the URL of the Merriam-Webster recording named AUDIO."
@@ -700,10 +770,11 @@ suggestions; a key error, for one, comes as plain text."
         data
       (string-trim body))))
 
-(defun mw-thesaurus--show (word text &optional pos reference no-entry)
+(defun mw-thesaurus--show (word text &optional pos reference no-entry dictionary)
   "Show TEXT, the entries for WORD in REFERENCE, in the current buffer.
 Put point at POS, or at the start.  REFERENCE defaults to the thesaurus.
-NO-ENTRY becomes the page's `mw-thesaurus--no-entry'."
+NO-ENTRY and DICTIONARY become the page's `mw-thesaurus--no-entry' and
+`mw-thesaurus--dictionary-entries'."
   (let ((inhibit-read-only t))
     (erase-buffer)
     (remove-overlays (point-min) (point-max) 'mw-thesaurus t)
@@ -712,7 +783,8 @@ NO-ENTRY becomes the page's `mw-thesaurus--no-entry'."
   (setq mw-thesaurus--word word
         mw-thesaurus--text text
         mw-thesaurus--reference (or reference 'thesaurus)
-        mw-thesaurus--no-entry no-entry)
+        mw-thesaurus--no-entry no-entry
+        mw-thesaurus--dictionary-entries dictionary)
   ;; `org-indent-mode' indents body lines itself, on top of any spaces.
   (when (bound-and-true-p org-indent-mode)
     (mw-thesaurus--unindent))
@@ -734,10 +806,11 @@ The rest of a line's indentation, which nests list items, stays."
                (replace-match "")))
         (forward-line 1)))))
 
-(defun mw-thesaurus--create-buffer (word dict-str &optional reference no-entry)
+(defun mw-thesaurus--create-buffer (word dict-str &optional reference no-entry dictionary)
   "Show DICT-STR, the entries for WORD in REFERENCE, in the thesaurus buffer.
 The page it replaces goes to the history of `mw-thesaurus-back'.
-NO-ENTRY becomes the page's `mw-thesaurus--no-entry'."
+NO-ENTRY and DICTIONARY become the page's `mw-thesaurus--no-entry' and
+`mw-thesaurus--dictionary-entries'; a nil DICTIONARY keeps those of WORD."
   (let ((temp-buf (get-buffer-create mw-thesaurus-buffer-name)))
     ;; The `url-retrieve' callback runs in the response buffer, not the user's.
     (unless (eq 'mw-thesaurus-mode
@@ -748,11 +821,14 @@ NO-ENTRY becomes the page's `mw-thesaurus--no-entry'."
         (switch-to-buffer-other-window temp-buf)))
     (set-buffer temp-buf)
     (with-current-buffer temp-buf
-      (when mw-thesaurus--word
-        (push (list mw-thesaurus--word mw-thesaurus--text (point) mw-thesaurus--reference
-                    mw-thesaurus--no-entry)
-              mw-thesaurus--history))
-      (mw-thesaurus--show word dict-str nil reference no-entry))))
+      (let ((dictionary (or dictionary
+                            (and (equal word (car mw-thesaurus--dictionary-entries))
+                                 mw-thesaurus--dictionary-entries))))
+        (when mw-thesaurus--word
+          (push (list mw-thesaurus--word mw-thesaurus--text (point) mw-thesaurus--reference
+                      mw-thesaurus--no-entry mw-thesaurus--dictionary-entries)
+                mw-thesaurus--history))
+        (mw-thesaurus--show word dict-str nil reference no-entry dictionary)))))
 
 (defun mw-thesaurus-back ()
   "Show the entries the thesaurus buffer had before the current ones.
@@ -824,14 +900,13 @@ serves; see `mw-thesaurus--lookups'."
 
 (defun mw-thesaurus--show-entries (word data reference &optional no-entry)
   "Show the entries in DATA, REFERENCE's answer for WORD; nil if it has none.
-NO-ENTRY becomes the page's `mw-thesaurus--no-entry'."
+NO-ENTRY becomes the page's `mw-thesaurus--no-entry'.  A dictionary page
+keeps its entries for the Synonym Chooser."
   (when-let* ((entries (mw-thesaurus--own-entries data word)))
-    (mw-thesaurus--create-buffer
-     word
-     (if (eq reference 'dictionary)
-         (mw-thesaurus--dictionary-parse entries)
-       (mw-thesaurus--parse entries))
-     reference no-entry)
+    (if (eq reference 'dictionary)
+        (mw-thesaurus--create-buffer word (mw-thesaurus--dictionary-parse entries)
+                                     reference no-entry (cons word entries))
+      (mw-thesaurus--create-buffer word (mw-thesaurus--parse entries) reference no-entry))
     t))
 
 (defun mw-thesaurus--lookup-suggestion (word reference data fallback)
@@ -877,16 +952,57 @@ MISSED-WORD is the word whose suggestion WORD is."
         (t (mw-thesaurus--lookup-suggestion word reference data fallback))))
      lookup)))
 
-(defun mw-thesaurus-switch-reference ()
-  "Look up the word of the page in the other reference, thesaurus or dictionary."
-  (interactive)
+(defun mw-thesaurus--show-tab (tab)
+  "Show the page's dictionary entries in TAB, `dictionary' or `synonym-chooser'.
+With no synonym discussion among them, keep the page and say so."
+  (let* ((entries (cdr mw-thesaurus--dictionary-entries))
+         (text (if (eq tab 'dictionary)
+                   (mw-thesaurus--dictionary-parse entries)
+                 (mw-thesaurus--chooser-parse entries))))
+    (if (string-empty-p text)
+        (progn (force-mode-line-update)
+               (message "No Synonym Chooser for \"%s\"" mw-thesaurus--word))
+      (mw-thesaurus--create-buffer mw-thesaurus--word text tab mw-thesaurus--no-entry))))
+
+(defun mw-thesaurus--lookup-chooser (word)
+  "Ask the dictionary about WORD, the page's word, and show its Synonym Chooser.
+The page keeps the answer, so its Dictionary tab needs no request."
+  (mw-thesaurus--request
+   word 'dictionary
+   (lambda (data)
+     (when-let* ((buffer (get-buffer mw-thesaurus-buffer-name)))
+       (with-current-buffer buffer
+         (setq mw-thesaurus--dictionary-entries
+               (cons word (mw-thesaurus--own-entries data word)))
+         (mw-thesaurus--show-tab 'synonym-chooser))))
+   (setq mw-thesaurus--lookups (1+ mw-thesaurus--lookups))))
+
+(defun mw-thesaurus-switch-reference (&optional tab)
+  "Show the page's word in TAB, by default the next tab of the header line.
+Interactively, TAB is that of the label clicked.  The Dictionary and the
+Synonym Chooser show one answer, so a switch between them sends no
+request."
+  (interactive (list (mw-thesaurus--clicked-tab last-input-event)))
   (with-current-buffer (or (get-buffer mw-thesaurus-buffer-name)
                            (user-error "No Merriam-Webster page to switch from"))
-    (when mw-thesaurus--no-entry
-      (user-error "No %s entry for \"%s\""
-                  (mw-thesaurus--source mw-thesaurus--no-entry) mw-thesaurus--word))
-    (mw-thesaurus--lookup-word mw-thesaurus--word
-                               (mw-thesaurus--other-reference mw-thesaurus--reference))))
+    (let* ((tabs (mw-thesaurus--page-tabs))
+           (tab (or tab (cadr (memq mw-thesaurus--reference (append tabs tabs))))))
+      (cond
+       ((memq tab (list nil mw-thesaurus--reference))
+        (user-error "No %s entry for \"%s\""
+                    (mw-thesaurus--source mw-thesaurus--no-entry) mw-thesaurus--word))
+       ((and (eq tab 'synonym-chooser) (null mw-thesaurus--dictionary-entries))
+        (mw-thesaurus--lookup-chooser mw-thesaurus--word))
+       ((or (eq tab 'synonym-chooser)
+            (and (eq tab 'dictionary) (cdr mw-thesaurus--dictionary-entries)))
+        ;; A lookup still waiting for its answer must not replace the new page.
+        (setq mw-thesaurus--lookups (1+ mw-thesaurus--lookups))
+        (mw-thesaurus--show-tab tab))
+       (t (mw-thesaurus--lookup-word mw-thesaurus--word tab))))))
+
+(defun mw-thesaurus--page-reference ()
+  "Return the reference of the page: the dictionary for a Synonym Chooser."
+  (if (eq mw-thesaurus--reference 'synonym-chooser) 'dictionary mw-thesaurus--reference))
 
 (defun mw-thesaurus-browse ()
   "Open the page of the thesaurus buffer on merriam-webster.com.
@@ -899,7 +1015,7 @@ On a link of the page, such as a pronunciation, follow the link instead."
                              (user-error "No Merriam-Webster page to open"))
       ;; The syllable dots of a word looked up from a dictionary page.
       (browse-url (format "https://www.merriam-webster.com/%s/%s"
-                          mw-thesaurus--reference
+                          (mw-thesaurus--page-reference)
                           (url-hexify-string
                            (replace-regexp-in-string "·" "" mw-thesaurus--word)))))))
 
@@ -958,7 +1074,7 @@ Look up the region, the word at point, or a word read from the user."
   "Look up the word at WORD-POINT in REFERENCE, the thesaurus by default.
 Interactively, look it up in the reference of the page shown.  On a
 page's link, such as a pronunciation, follow the link instead."
-  (interactive (list (point) mw-thesaurus--reference))
+  (interactive (list (point) (mw-thesaurus--page-reference)))
   (save-mark-and-excursion
     (goto-char word-point)
     (if (and (derived-mode-p 'mw-thesaurus-mode)

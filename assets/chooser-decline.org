@@ -1,0 +1,20 @@
+* decline ~verb~
+  /decline/, /refuse/, /reject/, /repudiate/, /spurn/ mean to turn away by not accepting, receiving, or considering. /decline/ often implies courteous refusal especially of offers or invitations.
+    /declined/ his party's nomination
+  /refuse/ suggests more positiveness or ungraciousness and often implies the denial of something asked for.
+    /refused/ to lend them the money
+  /reject/ implies a peremptory refusal by sending away or discarding.
+    /rejected/ the manuscript as unpublishable
+  /repudiate/ implies a casting off or disowning as untrue, unauthorized, or unworthy of acceptance.
+    teenagers who /repudiate/ the values of their parents
+  /spurn/ stresses contempt or disdain in rejection or repudiation.
+    /spurned/ his overtures of friendship
+* decline ~noun~
+  /deterioration/, /degeneration/, /decadence/, /decline/ mean the falling from a higher to a lower level in quality, character, or vitality. /deterioration/ implies generally the impairment of value or usefulness.
+    the /deterioration/ of the house through neglect
+  /degeneration/ stresses physical, intellectual, or especially moral retrogression.
+    the /degeneration/ of their youthful idealism into cynicism
+  /decadence/ presupposes a reaching and passing the peak of development and implies a turn downward with a consequent loss in vitality or energy.
+    cited love of luxury as a sign of cultural /decadence/
+  /decline/ differs from /decadence/ in suggesting a more markedly downward direction and greater momentum as well as more obvious evidence of deterioration.
+    the meteoric /decline/ of his career after the scandal

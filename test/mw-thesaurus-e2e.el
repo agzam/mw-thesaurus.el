@@ -140,7 +140,8 @@ A case that expects a page expects a dictionary page.  See
      ("dictionary dwim" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done))
       :expect (:shows "^\\* happy " :reference dictionary :current "Dictionary"
-               :header "\\` Thesaurus   Dictionary\\'" :windows 2 :lookups 1 :hook t))
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'" :windows 2 :lookups 1
+               :hook t))
      ("dictionary dwim, word start" :text ,mw-e2e--happy :point 8 :tags (flow)
       :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done))
       :expect (:shows "^\\* happy " :reference dictionary))
@@ -170,7 +171,7 @@ A case that expects a page expects a dictionary page.  See
      ("header line on a thesaurus page" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done))
       :expect (:shows "^\\* happy " :reference thesaurus :current "Thesaurus"
-               :header "\\` Thesaurus   Dictionary\\'"))
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'"))
      ("click the other label" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
               (eval (xterm-mouse-mode 1)) (click "Dictionary") (wait-done 6)
@@ -184,7 +185,35 @@ A case that expects a page expects a dictionary page.  See
      ("switch with o twice" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
               (keys "o") (wait-done 6) (keys "o") (wait-done 6))
-      :expect (:shows "^\\* happy " :reference thesaurus :current "Thesaurus" :lookups 3))
+      :expect (:shows "^\\* happy " :reference synonym-chooser :current "Synonym Chooser"
+               :lookups 2 :requests 2))
+     ("switch with o three times" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (keys "o") (wait-done 6) (keys "o") (wait-done 6) (keys "o") (wait-done 6))
+      :expect (:shows "^\\* happy " :reference thesaurus :current "Thesaurus"
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'" :lookups 3 :requests 3))
+     ("click Synonym Chooser on a dictionary page" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)
+              (eval (xterm-mouse-mode 1)) (click "Synonym Chooser") (wait-done 6)
+              (eval (xterm-mouse-mode -1)))
+      :expect (:shows "^\\* happy " :reference synonym-chooser :current "Synonym Chooser"
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'"
+               :lines ("mean meeting with unforeseen success")
+               :faces (mw-thesaurus-example) :lookups 1 :requests 1))
+     ("click Synonym Chooser, then Dictionary" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (eval (xterm-mouse-mode 1)) (click "Synonym Chooser") (wait-done 6)
+              (click "Dictionary") (wait-done 6) (eval (xterm-mouse-mode -1)))
+      :expect (:shows "^\\* happy " :reference dictionary :current "Dictionary"
+               :lines ("^  hap·py ") :lookups 1 :requests 2))
+     ("Synonym Chooser of a word without one" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
+              (search "glad") (keys "Enter") (wait-done 6)
+              (eval (xterm-mouse-mode 1)) (click "Synonym Chooser") (wait-done 6)
+              (eval (xterm-mouse-mode -1)))
+      :expect (:shows "^\\* glad " :reference thesaurus :current "Thesaurus"
+               :echo "No Synonym Chooser for \"glad\"" :header "\\` Thesaurus   Dictionary\\'"
+               :lookups 2 :requests 3))
      ("o twice before the answer" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (eval (mw-e2e-slow-replies 2))
               (keys "o" "o") (wait-done 15 3))
@@ -202,7 +231,7 @@ A case that expects a page expects a dictionary page.  See
       :steps ((eval (add-hook 'org-mode-hook #'org-indent-mode))
               (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done) (keys "o") (wait-done 6)
               (profile-keys ("l") ("H")) (pause 1))
-      :expect (:shows "^\\* happy " :reference dictionary :lookups 2
+      :expect (:shows "^\\* happy " :reference dictionary :lookups 1
                :lines ("^hap·py " "^1\\.$" "^   a\\. enjoying ")
                :faces (mw-thesaurus-example mw-thesaurus-syllables)))
      ("RET plays a pronunciation" :text ,mw-e2e--happy :point 10 :tags (flow)
@@ -273,7 +302,7 @@ A case that expects a page expects a dictionary page.  See
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
               (search "celebrated") (keys "Enter") (wait-done 6))
       :expect (:shows "^\\* celebrated " :reference dictionary
-               :header "\\` Thesaurus   Dictionary\\'" :lookups 2))
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'" :lookups 2))
      ("back to a page only one reference has" :text "It is famously hard.\n" :point 9
       :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
@@ -314,15 +343,16 @@ A case that expects a page expects a dictionary page.  See
      ("o after RET from a page only one reference has" :text "It is famously hard.\n"
       :point 9 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
-              (search "celebrated") (keys "Enter") (wait-done 6) (keys "o") (wait-done 6))
+              (search "celebrated") (keys "Enter") (wait-done 6)
+              (keys "o") (wait-done 6) (keys "o") (wait-done 6))
       :expect (:shows "^\\* celebrated " :reference thesaurus :current "Thesaurus"
-               :header "\\` Thesaurus   Dictionary\\'" :lookups 3))
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'" :lookups 3))
      ("thesaurus dwim on a page only one reference has" :text "It is famously hard.\n"
       :point 9 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
               (search "celebrated") (cmd "mw-thesaurus-lookup-dwim") (wait-done 6))
       :expect (:shows "^\\* celebrated " :reference thesaurus
-               :header "\\` Thesaurus   Dictionary\\'" :lookups 2))
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'" :lookups 2))
      ("at-point command, word only the dictionary has" :text "It is famously hard.\n"
       :point 9 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-at-point") (wait-done))
@@ -354,7 +384,7 @@ A case that expects a page expects a dictionary page.  See
      ("back past the first page" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done) (keys "o") (wait-done 6)
               (profile-keys ("l") ("H")) (pause 1) (profile-keys ("l") ("H")) (pause 1))
-      :expect (:shows "^\\* happy " :reference dictionary :error "No earlier lookup" :lookups 2
+      :expect (:shows "^\\* happy " :reference dictionary :error "No earlier lookup" :lookups 1
                :faces (mw-thesaurus-example mw-thesaurus-syllables)))
      ("RET on the syllables" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)
@@ -729,7 +759,7 @@ A case that expects a page expects a dictionary page.  See
                       (setq mw-e2e-defaults (mw-e2e-defaults))))
               (keys "l") (pause 1) (keys "o") (wait-done 6))
       :expect (:shows "^\\* happy " :reference dictionary
-               :header "\\` Thesaurus   Dictionary\\'" :lookups 3))
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'" :lookups 3))
      ("upgrade in a running session" :text "\n" :point 1 :tags (env upgrade)
       :steps ((eval (let ((inhibit-message t))
                       (load (expand-file-name "mw-thesaurus.el" ,mw-e2e--root) nil t)
@@ -982,13 +1012,13 @@ A case typing a command the package lacks fails at once, not after a timeout."
       (string-join
        (delq nil
              (list (if thesaurus
-                       ;; Only the dictionary is named, so thesaurus pages read
-                       ;; the same in origin/master, which has no references.
+                       ;; Only other tabs are named, so thesaurus pages read
+                       ;; the same in versions that have no references.
                        (format "shows %S (%d entries%s)" (plist-get thesaurus :head)
                                (plist-get thesaurus :entries)
-                               (if (eq 'dictionary (plist-get thesaurus :reference))
-                                   ", dictionary"
-                                 ""))
+                               (if (memq (plist-get thesaurus :reference) '(nil thesaurus))
+                                   ""
+                                 (format ", %s" (plist-get thesaurus :reference))))
                      "no thesaurus")
                    (when-let* ((outcomes (plist-get state :outcomes)))
                      (format "echo %S" (string-join outcomes " | ")))
@@ -1020,11 +1050,13 @@ That is the buffer's new name and the speaker after each thesaurus heading."
 
 (defun mw-e2e--page-diff (main branch)
   "Return how the thesaurus page in BRANCH differs from the one in MAIN, or nil.
-MAIN and BRANCH are states; only pages with the same head line compare."
+MAIN and BRANCH are states; only thesaurus pages with the same head line
+compare."
   (let ((a (plist-get main :thesaurus))
         (b (plist-get branch :thesaurus)))
     (when (and a b
-               (not (eq 'dictionary (plist-get b :reference)))
+               (memq (plist-get b :reference) '(nil thesaurus))
+               (eq (plist-get a :reference) (plist-get b :reference))
                (equal (mw-e2e--normalize (plist-get a :head))
                       (mw-e2e--normalize (plist-get b :head))))
       (let ((old (mw-e2e--normalize (plist-get a :text)))
@@ -1120,6 +1152,9 @@ MAIN and BRANCH are states; only pages with the same head line compare."
       (when-let* ((n (plist-get expect :lookups)))
         (unless (= n (length (plist-get state :lookups)))
           (fail "expected %d lookups" n)))
+      (when-let* ((n (plist-get expect :requests)))
+        (unless (= n (length (plist-get state :requests)))
+          (fail "expected %d API requests, not %S" n (plist-get state :requests))))
       (when (and (plist-get expect :hook) (not (plist-get state :hook)))
         (fail "mw-thesaurus-mode-hook did not run")))
     (nreverse failures)))
