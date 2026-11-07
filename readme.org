@@ -69,12 +69,14 @@ Doom binds ~RET~ in Org buffers to ~+org/dwim-at-point~ through ~evil-org-mode-m
 
 If the word has no entry, e.g. because of a typo, the first spelling suggestion shows instead.
 
+Many dictionary entries also explain how close synonyms differ, as "Choose the Right Synonym" does on merriam-webster.com. The Synonym Chooser tab shows these explanations: the words compared, what sets each apart, and an example of each.
+
 * Keys available in mw-thesaurus-mode
-The header line names both references, Thesaurus and Dictionary, and marks the one shown; a click on the other one switches.
+The header line names the tabs, Thesaurus, Dictionary and Synonym Chooser, and marks the one shown; a click on another one switches to it. For a word without a synonym explanation, the Synonym Chooser says so.
 
-~RET~ lookup for the word at the cursor (lets you "drill" into definition further), in the reference shown
+~RET~ lookup for the word at the cursor (lets you "drill" into definition further), in the reference shown; from the Synonym Chooser, in the dictionary
 
-~o~ show the word in the other reference, thesaurus or dictionary
+~o~ show the word in the next tab
 
 ~l~ (~H~ with evil) go back to the previous lookup, without a new request
 

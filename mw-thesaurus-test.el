@@ -72,6 +72,37 @@ The zero-width spaces around italics are left out."
   (should (equal (mw-thesaurus-test--asset "dictionary-decline.org")
                  (mw-thesaurus-test--dictionary "decline"))))
 
+(defun mw-thesaurus-test--dictionary-entries (word)
+  "Return the dictionary entries for WORD in ./assets as (WORD . ENTRIES)."
+  (cons word (mw-thesaurus--own-entries
+              (mw-thesaurus-test--read
+               (mw-thesaurus-test--asset (format "dictionary-%s.json" word)))
+              word)))
+
+(defun mw-thesaurus-test--chooser (word)
+  "Return the Synonym Chooser of WORD from its dictionary response in ./assets.
+The zero-width spaces around italics are left out."
+  (replace-regexp-in-string
+   "\u200b" ""
+   (mw-thesaurus--chooser-parse (cdr (mw-thesaurus-test--dictionary-entries word)) word)))
+
+(ert-deftest mw-thesaurus--chooser-parse-test ()
+  (should (equal (mw-thesaurus-test--asset "chooser-decline.org")
+                 (mw-thesaurus-test--chooser "decline"))))
+
+(ert-deftest mw-thesaurus--chooser-parse-lists-the-compared-words-test ()
+  (should (string-match-p "^  /lucky/, /fortunate/, /happy/, /providential/ mean "
+                          (mw-thesaurus-test--chooser "happy")))
+  (should (string-match-p
+           "^  /idea/, /concept/, /conception/, /thought/, /notion/, /impression/ mean "
+           (mw-thesaurus-test--chooser "conception")))
+  (dolist (word mw-thesaurus-test--dictionary-words)
+    (should-not (string-match-p "[{}]" (mw-thesaurus-test--chooser word))))
+  (dolist (word '("set" "cowl" "both" "tearaway" "borstal" "went" "been"))
+    (should (equal (format "* %s\n  Merriam-Webster doesn't explain how the synonyms of \"%s\" differ.\n"
+                           word word)
+                   (mw-thesaurus-test--chooser word)))))
+
 (ert-deftest mw-thesaurus--dictionary-parse-leaves-no-markup-test ()
   (dolist (word mw-thesaurus-test--dictionary-words)
     (let ((org (mw-thesaurus-test--dictionary word)))
@@ -245,7 +276,7 @@ Return a plist of the request URLs, what went to the buffer, and messages."
                           api)
                         url args)))
               ((symbol-function 'mw-thesaurus--create-buffer)
-               (lambda (word dict-str &optional reference no-entry)
+               (lambda (word dict-str &optional reference no-entry _dictionary)
                  (push word words) (push dict-str rendered) (push reference references)
                  (push no-entry no-entries)))
               ((symbol-function 'message)
@@ -654,6 +685,17 @@ THESAURUS and DICTIONARY answer each reference's requests, see
       (should (string-match-p "/collegiate/json/slope\\?" (nth 0 (plist-get result :urls))))
       (should (string-match-p "/thesaurus/json/slope\\?" (nth 1 (plist-get result :urls)))))))
 
+(ert-deftest mw-thesaurus-lookup-at-point-from-the-synonym-chooser-test ()
+  (with-temp-buffer
+    (insert "to refuse an offer")
+    (setq-local mw-thesaurus--reference 'synonym-chooser)
+    (goto-char 5)
+    (let ((result (mw-thesaurus-test--call
+                   #'mw-thesaurus-test--entry
+                   (lambda () (call-interactively #'mw-thesaurus-lookup-at-point)))))
+      (should (string-match-p "/collegiate/json/refuse\\?" (car (plist-get result :urls))))
+      (should (equal '(dictionary) (plist-get result :references))))))
+
 (ert-deftest mw-thesaurus--create-buffer-reuses-the-thesaurus-window-test ()
   (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
         (shown (window-buffer))
@@ -858,13 +900,15 @@ answers the kept request whose URL matches a regexp."
         (cl-letf (((symbol-function 'browse-url) (lambda (url &rest _) (push url urls))))
           (dolist (page '(("give up" "* give up ~verb~\n" dictionary)
                           ("happy" "* happy ~adjective~\n" thesaurus)
-                          ("hap·py" "* happy ~adjective~\n" dictionary)))
+                          ("hap·py" "* happy ~adjective~\n" dictionary)
+                          ("decline" "* decline ~verb~\n" synonym-chooser)))
             (mw-thesaurus-test--pages page)
             ;; From any buffer, as with M-x.
             (with-temp-buffer (mw-thesaurus-browse)))
           (should (equal '("https://www.merriam-webster.com/dictionary/give%20up"
                            "https://www.merriam-webster.com/thesaurus/happy"
-                           "https://www.merriam-webster.com/dictionary/happy")
+                           "https://www.merriam-webster.com/dictionary/happy"
+                           "https://www.merriam-webster.com/dictionary/decline")
                          (nreverse urls))))
       (kill-buffer mw-thesaurus-buffer-name))
     (should-error (mw-thesaurus-browse) :type 'user-error)))
@@ -897,23 +941,54 @@ answers the kept request whose URL matches a regexp."
     (should (equal '(:eval (mw-thesaurus--header-line)) header-line-format))
     (setq mw-thesaurus--reference 'dictionary)
     (let ((line (mw-thesaurus--header-line)))
-      (should (equal " Thesaurus   Dictionary" (substring-no-properties line)))
+      (should (equal " Thesaurus   Dictionary   Synonym Chooser" (substring-no-properties line)))
       (should (eq 'bold (get-text-property (string-match "Dictionary" line) 'face line)))
       (should-not (get-text-property (string-match "Dictionary" line) 'local-map line))
-      (let ((other (string-match "Thesaurus" line)))
-        (should (eq 'shadow (get-text-property other 'face line)))
-        (should (eq #'mw-thesaurus-switch-reference
-                    (lookup-key (get-text-property other 'local-map line)
-                                [header-line mouse-1])))))))
+      (dolist (other '(("Thesaurus" . thesaurus) ("Synonym Chooser" . synonym-chooser)))
+        (let ((at (string-match (car other) line)))
+          (should (eq 'shadow (get-text-property at 'face line)))
+          (should (eq (cdr other) (get-text-property at 'mw-thesaurus-tab line)))
+          (should (eq #'mw-thesaurus-switch-reference
+                      (lookup-key (get-text-property at 'local-map line)
+                                  [header-line mouse-1]))))))))
 
 (ert-deftest mw-thesaurus-header-line-leaves-out-a-reference-without-the-word-test ()
   (with-temp-buffer
     (mw-thesaurus-mode)
     (setq mw-thesaurus--reference 'dictionary
-          mw-thesaurus--no-entry 'thesaurus)
+          mw-thesaurus--no-entry 'thesaurus
+          mw-thesaurus--dictionary-entries '("famously"))
     (let ((line (mw-thesaurus--header-line)))
-      (should (equal " Dictionary" (substring-no-properties line)))
+      (should (equal " Dictionary   Synonym Chooser" (substring-no-properties line)))
       (should (eq 'bold (get-text-property 1 'face line))))))
+
+(ert-deftest mw-thesaurus-header-line-keeps-the-synonym-chooser-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    (cl-flet ((header () (substring-no-properties (mw-thesaurus--header-line))))
+      ;; Before the page asks the dictionary, and for words with nothing to show.
+      (should (equal " Thesaurus   Dictionary   Synonym Chooser" (header)))
+      (setq mw-thesaurus--dictionary-entries (mw-thesaurus-test--dictionary-entries "set"))
+      (should (equal " Thesaurus   Dictionary   Synonym Chooser" (header)))
+      (setq mw-thesaurus--dictionary-entries '("drain away"))
+      (should (equal " Thesaurus   Dictionary   Synonym Chooser" (header)))
+      (setq mw-thesaurus--dictionary-entries (mw-thesaurus-test--dictionary-entries "decline")
+            mw-thesaurus--reference 'synonym-chooser)
+      (let ((line (mw-thesaurus--header-line)))
+        (should (equal " Thesaurus   Dictionary   Synonym Chooser"
+                       (substring-no-properties line)))
+        (should (eq 'bold (get-text-property (string-match "Synonym" line) 'face line))))
+      (setq mw-thesaurus--dictionary-entries nil
+            mw-thesaurus--reference 'thesaurus
+            mw-thesaurus--no-entry 'dictionary)
+      (should (equal " Thesaurus" (header))))))
+
+(ert-deftest mw-thesaurus-mode-wraps-long-lines-test ()
+  (let ((org-startup-truncated t))
+    (with-temp-buffer
+      (mw-thesaurus-mode)
+      (should-not truncate-lines)
+      (should word-wrap))))
 
 (ert-deftest mw-thesaurus-mode-keeps-org-overriding-maps-test ()
   (let ((org-modes (with-temp-buffer
@@ -1006,12 +1081,17 @@ Each page is the arguments of `mw-thesaurus--create-buffer'."
                               url args))))
             ;; The `url-retrieve' callback runs in a buffer of its own.
             (with-temp-buffer (mw-thesaurus-switch-reference))
+            (with-temp-buffer (mw-thesaurus-switch-reference))
             (with-temp-buffer (mw-thesaurus-switch-reference)))
+          ;; The Synonym Chooser shows the dictionary's answer.
+          (should (equal 2 (length urls)))
           (should (string-match-p "/collegiate/json/decline\\?" (nth 1 urls)))
           (should (string-match-p "/thesaurus/json/decline\\?" (nth 0 urls)))
           (with-current-buffer mw-thesaurus-buffer-name
             (should (eq 'thesaurus mw-thesaurus--reference))
             (should (equal (mw-thesaurus-test--asset "sample.org") (buffer-string)))
+            (mw-thesaurus-back)
+            (should (eq 'synonym-chooser mw-thesaurus--reference))
             (mw-thesaurus-back)
             (should (eq 'dictionary mw-thesaurus--reference))
             (should (string-prefix-p "* decline ~verb~\n  de·cline" (buffer-string)))
@@ -1024,9 +1104,10 @@ Each page is the arguments of `mw-thesaurus--create-buffer'."
   (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
     (unwind-protect
         (progn
-          (mw-thesaurus-test--pages '("decline" "* decline ~verb~\n" dictionary))
-          (let ((result (mw-thesaurus-test--call (lambda (_) "[]")
-                                                 #'mw-thesaurus-switch-reference)))
+          (mw-thesaurus-test--pages '("decline" "* decline ~verb~\n" dictionary nil ("decline")))
+          (let ((result (mw-thesaurus-test--call
+                         (lambda (_) "[]")
+                         (lambda () (mw-thesaurus-switch-reference 'thesaurus)))))
             (should (string-match-p "/thesaurus/json/decline\\?"
                                     (car (plist-get result :urls))))
             ;; The buffer shows the dictionary's entry already.
@@ -1046,28 +1127,54 @@ Each page is the arguments of `mw-thesaurus--create-buffer'."
   (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
     (unwind-protect
         (progn
-          (mw-thesaurus-test--pages '("famously" "* famously ~adverb~\n" dictionary thesaurus))
+          (mw-thesaurus-test--pages
+           '("drain away" "* drain (away) ~verb~\n" thesaurus dictionary))
           (let ((result (mw-thesaurus-test--call
                          #'mw-thesaurus-test--entry
                          (lambda ()
-                           (should (equal '(user-error "No Merriam-Webster entry for \"famously\"")
+                           (should (equal '(user-error
+                                            "No Merriam-Webster dictionary entry for \"drain away\"")
                                           (should-error (mw-thesaurus-switch-reference)
                                                         :type 'user-error)))))))
             (should-not (plist-get result :urls))))
       (kill-buffer mw-thesaurus-buffer-name))))
 
+(ert-deftest mw-thesaurus-switch-reference-on-a-page-only-the-dictionary-has-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (entries (list "famously" '((meta (stems . ["famously"]))
+                                     (hwi (hw . "fa*mous*ly"))
+                                     (fl . "adverb"))))
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages
+                  (list "famously" "* famously ~adverb~\n" 'dictionary 'thesaurus entries))
+                 (mw-thesaurus-switch-reference)
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (should (eq 'synonym-chooser mw-thesaurus--reference))
+                   (should (string-match-p "doesn't explain how the synonyms of \"famously\""
+                                           (buffer-string)))
+                   (should (equal " Dictionary   Synonym Chooser"
+                                  (substring-no-properties (mw-thesaurus--header-line))))
+                   (mw-thesaurus-switch-reference)
+                   (should (eq 'dictionary mw-thesaurus--reference)))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should-not (plist-get result :urls))))
+
 (ert-deftest mw-thesaurus-back-to-a-page-without-the-other-entry-test ()
   (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
     (unwind-protect
         (progn
-          (mw-thesaurus-test--pages '("famously" "* famously ~adverb~\n" dictionary thesaurus)
-                                    '("celebrated" "* celebrated ~adjective~\n" dictionary))
+          (mw-thesaurus-test--pages
+           '("famously" "* famously ~adverb~\n" dictionary thesaurus ("famously"))
+           '("celebrated" "* celebrated ~adjective~\n" dictionary nil ("celebrated")))
           (with-current-buffer mw-thesaurus-buffer-name
-            (should (equal " Thesaurus   Dictionary"
+            (should (equal " Thesaurus   Dictionary   Synonym Chooser"
                            (substring-no-properties (mw-thesaurus--header-line))))
             (mw-thesaurus-back)
             (should (equal "famously" mw-thesaurus--word))
-            (should (equal " Dictionary"
+            (should (equal " Dictionary   Synonym Chooser"
                            (substring-no-properties (mw-thesaurus--header-line))))))
       (kill-buffer mw-thesaurus-buffer-name))))
 
@@ -1107,6 +1214,159 @@ Each page is the arguments of `mw-thesaurus--create-buffer'."
             (should-not (get-buffer mw-thesaurus-buffer-name))))
       (when (get-buffer mw-thesaurus-buffer-name)
         (kill-buffer mw-thesaurus-buffer-name)))))
+
+(defun mw-thesaurus-test--with-api (body)
+  "Call BODY with a fake API and pages that no window shows.
+The dictionary answers from ./assets, the thesaurus with an entry for
+any word.  Return a plist of the request URLs and the messages."
+  (let ((dictionary (mw-thesaurus-test--fake-api
+                     (lambda (word)
+                       (mw-thesaurus-test--asset (format "dictionary-%s.json" word)))))
+        (thesaurus (mw-thesaurus-test--fake-api #'mw-thesaurus-test--entry))
+        urls messages)
+    (cl-letf (((symbol-function 'switch-to-buffer-other-window) #'ignore)
+              ((symbol-function 'url-retrieve)
+               (lambda (url &rest args)
+                 (push url urls)
+                 (apply (if (string-match-p "/collegiate/" url) dictionary thesaurus)
+                        url args)))
+              ((symbol-function 'message)
+               (lambda (fmt &rest args) (push (apply #'format fmt args) messages))))
+      (funcall body))
+    (list :urls (nreverse urls) :messages (nreverse messages))))
+
+(defun mw-thesaurus-test--click (label)
+  "Return a mouse-1 event on LABEL in the header line of the current buffer."
+  (let ((line (mw-thesaurus--header-line)))
+    (list 'mouse-1 (list (selected-window) 'header-line '(0 . 0) 0
+                         (cons line (string-match (regexp-quote label) line))
+                         nil '(0 . 0) nil '(0 . 0) '(0 . 0)))))
+
+(ert-deftest mw-thesaurus-synonym-chooser-from-the-dictionary-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus--lookup-word "decline" 'dictionary)
+                 (mw-thesaurus-switch-reference)
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (should (eq 'synonym-chooser mw-thesaurus--reference))
+                   (should (equal (mw-thesaurus-test--asset "chooser-decline.org")
+                                  (replace-regexp-in-string "\u200b" "" (buffer-string)))))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    ;; The dictionary's answer makes both pages.
+    (should (equal 1 (length (plist-get result :urls))))
+    (should-not (plist-get result :messages))))
+
+(ert-deftest mw-thesaurus-synonym-chooser-from-the-thesaurus-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages '("decline" "* decline ~verb~\n"))
+                 (mw-thesaurus-switch-reference 'synonym-chooser)
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (should (eq 'synonym-chooser mw-thesaurus--reference)))
+                 (mw-thesaurus-switch-reference 'dictionary)
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (should (eq 'dictionary mw-thesaurus--reference))
+                   (should (string-prefix-p "* decline ~verb~\n  de·cline" (buffer-string))))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should (string-match-p "/collegiate/json/decline\\?" (car (plist-get result :urls))))))
+
+(ert-deftest mw-thesaurus-synonym-chooser-of-a-word-without-one-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages '("set" "* set ~verb~\n"))
+                 (mw-thesaurus-switch-reference 'synonym-chooser)
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (should (eq 'synonym-chooser mw-thesaurus--reference))
+                   (should (equal (concat "* set\n  Merriam-Webster doesn't explain how the"
+                                          " synonyms of \"set\" differ.\n")
+                                  (buffer-string)))
+                   (should (equal " Thesaurus   Dictionary   Synonym Chooser"
+                                  (substring-no-properties (mw-thesaurus--header-line))))
+                   (mw-thesaurus-switch-reference)
+                   (should (eq 'thesaurus mw-thesaurus--reference))
+                   ;; The thesaurus page keeps the dictionary's answer for the word.
+                   (mw-thesaurus-switch-reference)
+                   (should (eq 'dictionary mw-thesaurus--reference))
+                   (mw-thesaurus-switch-reference)
+                   (should (eq 'synonym-chooser mw-thesaurus--reference)))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should-not (plist-get result :messages))
+    (should (equal 2 (length (plist-get result :urls))))
+    (should (string-match-p "/collegiate/json/set\\?" (nth 0 (plist-get result :urls))))
+    (should (string-match-p "/thesaurus/json/set\\?" (nth 1 (plist-get result :urls))))))
+
+(ert-deftest mw-thesaurus-switch-reference-shows-the-clicked-tab-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages
+                  (list "decline" "* decline ~verb~\n" 'dictionary nil
+                        (mw-thesaurus-test--dictionary-entries "decline")))
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (should-not (mw-thesaurus--clicked-tab ?o))
+                   (should-not (mw-thesaurus--clicked-tab (mw-thesaurus-test--click "Dictionary")))
+                   ;; o would show the Synonym Chooser.
+                   (let ((last-input-event (mw-thesaurus-test--click "Thesaurus")))
+                     (call-interactively #'mw-thesaurus-switch-reference))
+                   (should (eq 'thesaurus mw-thesaurus--reference))
+                   (let ((last-input-event (mw-thesaurus-test--click "Synonym Chooser")))
+                     (call-interactively #'mw-thesaurus-switch-reference))
+                   (should (eq 'synonym-chooser mw-thesaurus--reference)))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    ;; The thesaurus page keeps the dictionary's answer for the word.
+    (should (equal 1 (length (plist-get result :urls))))
+    (should (string-match-p "/thesaurus/json/decline\\?" (car (plist-get result :urls))))))
+
+(ert-deftest mw-thesaurus-back-to-a-synonym-chooser-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages
+                  (list "decline" "* decline ~verb~\n" 'dictionary nil
+                        (mw-thesaurus-test--dictionary-entries "decline")))
+                 (mw-thesaurus-switch-reference)
+                 (mw-thesaurus-test--pages '("refuse" "* refuse ~verb~\n"))
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (should-not mw-thesaurus--dictionary-entries)
+                   (mw-thesaurus-back)
+                   (should (eq 'synonym-chooser mw-thesaurus--reference))
+                   (should (equal "decline" (car mw-thesaurus--dictionary-entries)))
+                   (mw-thesaurus-switch-reference 'dictionary)
+                   (should (eq 'dictionary mw-thesaurus--reference)))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should-not (plist-get result :urls))))
+
+(ert-deftest mw-thesaurus-switch-reference-drops-a-pending-answer-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (progn
+          (mw-thesaurus-test--pages
+           (list "decline" "* decline ~verb~\n" 'dictionary nil
+                 (mw-thesaurus-test--dictionary-entries "decline")))
+          (let ((result (mw-thesaurus-test--call
+                         #'mw-thesaurus-test--entry
+                         (mw-thesaurus-test--held
+                          (lambda (answer)
+                            (mw-thesaurus--lookup-word "glad")
+                            (mw-thesaurus-switch-reference)
+                            (funcall answer "/glad\\?"))))))
+            (should (equal '("decline") (plist-get result :words)))
+            (should (equal '(synonym-chooser) (plist-get result :references)))))
+      (kill-buffer mw-thesaurus-buffer-name))))
 
 (ert-deftest mw-thesaurus--audio-url-test ()
   (dolist (case '(("declin03" . "d/declin03") ("bixcow04" . "bix/bixcow04")

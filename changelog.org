@@ -3,6 +3,17 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
+* [Unreleased]
+
+** Added
+- a third tab in the header line, Synonym Chooser, shows how the dictionary tells close synonyms apart, as "Choose the Right Synonym" does on merriam-webster.com: the words compared, in italics, what sets each apart, and an example of each
+- the Synonym Chooser shows the same answer as the dictionary page, so a switch between the two sends no request, and from a thesaurus page it sends one; for a word without such an explanation, its page says so
+- on a Synonym Chooser page, ~RET~ looks up the word at point in the dictionary, and ~C-c C-o~ opens the word's dictionary page on merriam-webster.com
+
+** Changed
+- ~o~ shows the next tab of the header line, so on a dictionary page it shows the Synonym Chooser, not the thesaurus; a click on a label shows its tab
+- long lines wrap instead of running off the window
+
 * [2.0.1] - 2026-11-04
 
 ** Fixed
