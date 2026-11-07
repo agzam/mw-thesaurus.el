@@ -49,7 +49,7 @@
     (define-key map [remap org-open-at-point] #'mw-thesaurus-browse)
     ;; Evil takes plain digits for counts; a minor mode that binds M-digits,
     ;; such as winum, outranks this map and keeps them.
-    (dolist (digit '("1" "2" "3" "4"))
+    (dolist (digit '("1" "2" "3" "4" "5"))
       (define-key map (kbd (concat "M-" digit)) #'mw-thesaurus-switch-to-tab))
     map)
   "Keymap for `mw-thesaurus-mode'.
@@ -111,10 +111,10 @@ answer that comes after one of them is dropped.")
 
 (defconst mw-thesaurus--tabs
   '(thesaurus "Thesaurus" dictionary "Dictionary" synonym-chooser "Synonym Chooser"
-              spanish "Spanish")
+              spanish "Spanish" medical "Medical")
   "The tabs of the header line in order, each followed by its label.
 The Synonym Chooser shows how the dictionary tells close synonyms apart.
-Spanish shows the Spanish-English Dictionary.")
+Spanish and Medical show the Spanish-English and Medical dictionaries.")
 
 (defvar mw-thesaurus--header-line-map
   (let ((map (make-sparse-keymap)))
@@ -124,11 +124,11 @@ Spanish shows the Spanish-English Dictionary.")
 
 (defun mw-thesaurus--page-tabs ()
   "Return the tabs the page shows, in the order of `mw-thesaurus--tabs'.
-It leaves out `mw-thesaurus--no-entry', and Spanish without its key; a
-page without a dictionary entry also leaves out the Synonym Chooser,
-which shows the dictionary's answer."
+It leaves out `mw-thesaurus--no-entry', and Spanish or Medical without
+its key; a page without a dictionary entry also leaves out the Synonym
+Chooser, which shows the dictionary's answer."
   (seq-difference (seq-filter #'symbolp mw-thesaurus--tabs)
-                  (append (unless (mw-thesaurus--key 'spanish) '(spanish))
+                  (append (seq-remove #'mw-thesaurus--key '(spanish medical))
                           (if (eq mw-thesaurus--no-entry 'dictionary)
                               '(synonym-chooser dictionary)
                             (list mw-thesaurus--no-entry)))))
@@ -145,7 +145,7 @@ A click on another label shows its tab, which the label carries."
                  (propertize label
                              'face 'shadow
                              'mouse-face 'header-line-highlight
-                             'help-echo (format "mouse-1, M-%d: show the word in the %s"
+                             'help-echo (format "mouse-1, M-%d: show the %s tab"
                                                 (1+ (seq-position
                                                      (seq-filter #'symbolp mw-thesaurus--tabs) tab))
                                                 label)
@@ -207,6 +207,11 @@ On a read-only page:
 The header line shows the Spanish tab only while this is set."
   :type '(choice (const :tag "None" nil) string))
 
+(defcustom mw-thesaurus-medical-api-key nil
+  "Merriam-Webster Medical Dictionary API access key.
+The header line shows the Medical tab only while this is set."
+  :type '(choice (const :tag "None" nil) string))
+
 (defcustom mw-thesaurus-audio-player nil
   "Command that plays a pronunciation: a program and its arguments.
 The recording's file comes last.  nil means the first of afplay, mpv,
@@ -234,6 +239,10 @@ ffplay and mpg123 that `executable-find' finds."
 (defconst mw-thesaurus--spanish-api-url
   "https://www.dictionaryapi.com/api/v3/references/spanish/json/"
   "Merriam-Webster Spanish-English Dictionary API URL.")
+
+(defconst mw-thesaurus--medical-api-url
+  "https://www.dictionaryapi.com/api/v3/references/medical/json/"
+  "Merriam-Webster Medical Dictionary API URL.")
 
 (defconst mw-thesaurus--word-lists
   '((syn_list . "Synonyms")
@@ -947,6 +956,7 @@ Point returns to where it was, and no request goes to Merriam-Webster."
   (pcase reference
     ('dictionary 'mw-thesaurus-dictionary-api-key)
     ('spanish 'mw-thesaurus-spanish-api-key)
+    ('medical 'mw-thesaurus-medical-api-key)
     (_ 'mw-thesaurus-api-key)))
 
 (defun mw-thesaurus--key-help (reference)
@@ -956,6 +966,7 @@ Point returns to where it was, and no request goes to Merriam-Webster."
           (pcase reference
             ('dictionary "Collegiate Dictionary")
             ('spanish "Spanish-English Dictionary")
+            ('medical "Medical Dictionary")
             (_ "Collegiate Thesaurus"))))
 
 (defun mw-thesaurus--source (reference)
@@ -963,6 +974,7 @@ Point returns to where it was, and no request goes to Merriam-Webster."
   (pcase reference
     ('dictionary "Merriam-Webster dictionary")
     ('spanish "Merriam-Webster Spanish-English")
+    ('medical "Merriam-Webster medical dictionary")
     (_ "Merriam-Webster")))
 
 (defun mw-thesaurus--other-reference (reference)
@@ -986,6 +998,7 @@ serves; see `mw-thesaurus--lookups'."
      (concat (pcase reference
                ('dictionary mw-thesaurus--dictionary-api-url)
                ('spanish mw-thesaurus--spanish-api-url)
+               ('medical mw-thesaurus--medical-api-url)
                (_ mw-thesaurus--api-url))
              (url-hexify-string (mw-thesaurus--fold word)) "?key=" key)
      (lambda (status)
@@ -1018,8 +1031,8 @@ keeps its entries for the Synonym Chooser."
   (when-let* ((entries (mw-thesaurus--own-entries data word)))
     (mw-thesaurus--create-buffer
      word
-     ;; Spanish-English entries have the layout of the dictionary's.
-     (if (memq reference '(spanish dictionary))
+     ;; Spanish-English and medical entries have the layout of the dictionary's.
+     (if (memq reference '(spanish medical dictionary))
          (mw-thesaurus--dictionary-parse entries)
        (mw-thesaurus--parse entries))
      reference no-entry (and (eq reference 'dictionary) (cons word entries)))
@@ -1223,7 +1236,8 @@ page's link, such as a pronunciation, follow the link instead."
   "Look up a thesaurus definition using Merriam-Webster online dictionary.
 `BEGINNING' and `END' correspond to the selected text with a word to look up.
 If there is no selection provided, additional input will be required.
-REFERENCE, the thesaurus by default, can also be `dictionary' or `spanish'."
+REFERENCE, the thesaurus by default, can also be `dictionary', `spanish'
+or `medical'."
   (interactive
    ;; it is a simple interactive function instead of interactive "r"
    ;; because it doesn't produce an error in a buffer without a mark

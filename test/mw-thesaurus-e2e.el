@@ -46,7 +46,10 @@
   "origin/master's package, then the checkout's.")
 
 (defconst mw-e2e--spanish-key "e2e-spanish-key"
-  "A made-up Spanish-English Dictionary key, see `mw-e2e--seed-spanish'.")
+  "A made-up Spanish-English Dictionary key, see `mw-e2e--seed-references'.")
+
+(defconst mw-e2e--medical-key "e2e-medical-key"
+  "A made-up Medical Dictionary key, see `mw-e2e--seed-references'.")
 
 ;;; Cases
 
@@ -245,6 +248,20 @@ A case that expects a page expects a dictionary page.  See
               (keys "C-c" "C-o") (pause 1))
       :expect (:shows "^\\* rodeo " :reference spanish :lookups 2
                :browsed "https://www.nglish.com/spanish/en/rodeo"))
+     ("click Medical with its key" :text "Take an aspirin.\n" :point 10 :tags (flow)
+      :steps ((eval (setq mw-thesaurus-medical-api-key ,mw-e2e--medical-key))
+              (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)
+              (eval (xterm-mouse-mode 1)) (click "Medical") (wait-done 6)
+              (eval (xterm-mouse-mode -1)))
+      :expect (:shows "^\\* aspirin " :reference medical :current "Medical"
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser   Medical\\'"
+               :lines ("a tablet of aspirin$") :lookups 2 :requests 2))
+     ("M-5, then C-c C-o on a Medical page" :text "Take an aspirin.\n" :point 10 :tags (flow)
+      :steps ((eval (setq mw-thesaurus-medical-api-key ,mw-e2e--medical-key))
+              (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)
+              (keys "M-5") (wait-done 6) (keys "C-c" "C-o") (pause 1))
+      :expect (:shows "^\\* aspirin " :reference medical :lookups 2
+               :browsed "https://www.merriam-webster.com/medical/aspirin"))
      ("o twice before the answer" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (eval (mw-e2e-slow-replies 2))
               (keys "o" "o") (wait-done 15 3))
@@ -863,27 +880,29 @@ others the flow cases."
     (package-refresh-contents)
     (mapc #'package-install missing)))
 
-(defun mw-e2e--seed-spanish ()
-  "Keep each ./assets/spanish-WORD.json as the answer for WORD.
-The run has no Spanish-English Dictionary key, so its cases send
-`mw-e2e--spanish-key' and get these samples from the answer cache."
+(defun mw-e2e--seed-references ()
+  "Keep each ./assets/REFERENCE-WORD.json as the answer for WORD.
+The run has no Spanish-English or Medical Dictionary key, so their cases
+send a made-up key and get these answers from the answer cache."
   (load (expand-file-name "mw-thesaurus-e2e-cache.el" mw-e2e--test-dir) nil t)
   (when mw-e2e-cache
     (make-directory mw-e2e-cache t)
-    (dolist (file (directory-files (expand-file-name "assets" mw-e2e--root) t
-                                   "\\`spanish-.+\\.json\\'"))
-      (with-temp-buffer
-        (set-buffer-multibyte nil)
-        (insert "HTTP/1.1 200 OK\nContent-Type: application/json\n\n")
-        (insert-file-contents-literally file)
-        (let ((coding-system-for-write 'binary))
-          (write-region nil nil
-                        (mw-e2e--cache-file
-                         (format "%s%s?key=%s"
-                                 "https://www.dictionaryapi.com/api/v3/references/spanish/json/"
-                                 (substring (file-name-base file) (length "spanish-"))
-                                 mw-e2e--spanish-key))
-                        nil 'silent))))))
+    (pcase-dolist (`(,reference . ,key) `(("spanish" . ,mw-e2e--spanish-key)
+                                          ("medical" . ,mw-e2e--medical-key)))
+      (dolist (file (directory-files (expand-file-name "assets" mw-e2e--root) t
+                                     (format "\\`%s-.+\\.json\\'" reference)))
+        (with-temp-buffer
+          (set-buffer-multibyte nil)
+          (insert "HTTP/1.1 200 OK\nContent-Type: application/json\n\n")
+          (insert-file-contents-literally file)
+          (let ((coding-system-for-write 'binary))
+            (write-region nil nil
+                          (mw-e2e--cache-file
+                           (format "https://www.dictionaryapi.com/api/v3/references/%s/json/%s?key=%s"
+                                   reference
+                                   (substring (file-name-base file) (1+ (length reference)))
+                                   key))
+                          nil 'silent)))))))
 
 (defun mw-e2e--main-source ()
   "Write origin/master's mw-thesaurus.el into the run and return its directory."
@@ -1279,7 +1298,7 @@ compare."
     (error "No case label matches MW_E2E_CASES %S, an Emacs regexp (\\| between labels)"
            mw-e2e--only))
   (make-directory mw-e2e--dir t)
-  (mw-e2e--seed-spanish)
+  (mw-e2e--seed-references)
   (mw-e2e--packages)
   (unwind-protect
       (dolist (profile mw-e2e--profiles)

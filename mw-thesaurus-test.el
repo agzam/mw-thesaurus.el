@@ -1349,20 +1349,24 @@ Each page is the arguments of `mw-thesaurus--create-buffer'."
       (when (get-buffer mw-thesaurus-buffer-name)
         (kill-buffer mw-thesaurus-buffer-name)))))
 
+(defun mw-thesaurus-test--asset-or-nothing (prefix)
+  "Return a fake API answer from ./assets/PREFIX-WORD.json, or with nothing."
+  (lambda (word)
+    (let ((file (format "%s-%s.json" prefix word)))
+      (if (file-exists-p (expand-file-name file "assets"))
+          (mw-thesaurus-test--asset file)
+        "[]"))))
+
 (defun mw-thesaurus-test--with-api (body)
   "Call BODY with a fake API and pages that no window shows.
 The dictionary answers from ./assets, the thesaurus with an entry for any
-word, the Spanish-English Dictionary from ./assets or with nothing.
-Return a plist of the request URLs and the messages."
+word, the Spanish-English and Medical dictionaries from ./assets or with
+nothing.  Return a plist of the request URLs and the messages."
   (let ((dictionary (mw-thesaurus-test--fake-api
                      (lambda (word)
                        (mw-thesaurus-test--asset (format "dictionary-%s.json" word)))))
-        (spanish (mw-thesaurus-test--fake-api
-                  (lambda (word)
-                    (let ((file (format "spanish-%s.json" word)))
-                      (if (file-exists-p (expand-file-name file "assets"))
-                          (mw-thesaurus-test--asset file)
-                        "[]")))))
+        (spanish (mw-thesaurus-test--fake-api (mw-thesaurus-test--asset-or-nothing "spanish")))
+        (medical (mw-thesaurus-test--fake-api (mw-thesaurus-test--asset-or-nothing "medical")))
         (thesaurus (mw-thesaurus-test--fake-api #'mw-thesaurus-test--entry))
         urls messages)
     (cl-letf (((symbol-function 'switch-to-buffer-other-window) #'ignore)
@@ -1371,6 +1375,7 @@ Return a plist of the request URLs and the messages."
                  (push url urls)
                  (apply (cond ((string-match-p "/collegiate/" url) dictionary)
                               ((string-match-p "/spanish/" url) spanish)
+                              ((string-match-p "/medical/" url) medical)
                               (t thesaurus))
                         url args)))
               ((symbol-function 'message)
@@ -1514,15 +1519,66 @@ Return a plist of the request URLs and the messages."
 (ert-deftest mw-thesaurus-mode-meta-digits-show-tabs-test ()
   (with-temp-buffer
     (mw-thesaurus-mode)
-    (dolist (key '("M-1" "M-2" "M-3" "M-4"))
+    (dolist (key '("M-1" "M-2" "M-3" "M-4" "M-5"))
       (should (eq #'mw-thesaurus-switch-to-tab (key-binding (kbd key)))))
     ;; A writable page keeps them, as they type no text.
     (let ((buffer-read-only nil))
       (should (eq #'mw-thesaurus-switch-to-tab (key-binding (kbd "M-2")))))
     (setq mw-thesaurus--reference 'dictionary)
     (let ((line (mw-thesaurus--header-line)))
-      (should (equal "mouse-1, M-3: show the word in the Synonym Chooser"
+      (should (equal "mouse-1, M-3: show the Synonym Chooser tab"
                      (get-text-property (string-match "Synonym" line) 'help-echo line))))))
+
+(ert-deftest mw-thesaurus-header-line-shows-medical-with-its-key-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    (cl-flet ((header () (substring-no-properties (mw-thesaurus--header-line))))
+      (let ((mw-thesaurus-spanish-api-key nil)
+            (mw-thesaurus-medical-api-key "  "))
+        (should (equal " Thesaurus   Dictionary   Synonym Chooser" (header))))
+      (let ((mw-thesaurus-spanish-api-key nil)
+            (mw-thesaurus-medical-api-key "medical-key"))
+        (should (equal " Thesaurus   Dictionary   Synonym Chooser   Medical" (header))))
+      (let ((mw-thesaurus-spanish-api-key "spanish-key")
+            (mw-thesaurus-medical-api-key "medical-key"))
+        (should (equal " Thesaurus   Dictionary   Synonym Chooser   Spanish   Medical" (header)))
+        (let ((line (mw-thesaurus--header-line)))
+          (should (equal "mouse-1, M-5: show the Medical tab"
+                         (get-text-property (string-match "Medical" line) 'help-echo line))))))))
+
+(ert-deftest mw-thesaurus-switch-to-tab-medical-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (mw-thesaurus-medical-api-key "medical-key")
+         browsed
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages
+                  (list "aspirin" "* aspirin ~noun~\n" 'dictionary nil '("aspirin")))
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (mw-thesaurus-switch-to-tab 5)
+                   (should (eq 'medical mw-thesaurus--reference))
+                   (should (string-prefix-p
+                            "* aspirin ~noun~\n  as·pi·rin [[mw-thesaurus-audio:aspiri01][ˈas-p(ə-)rən]]\n"
+                            (buffer-string)))
+                   (cl-letf (((symbol-function 'browse-url) (lambda (url &rest _) (push url browsed))))
+                     (mw-thesaurus-browse)))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should (equal '("https://www.merriam-webster.com/medical/aspirin") browsed))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should (string-match-p "/medical/json/aspirin\\?key=medical-key\\'"
+                            (car (plist-get result :urls))))))
+
+(ert-deftest mw-thesaurus-medical-lookup-messages-test ()
+  (should (equal "Set `mw-thesaurus-medical-api-key' to a Medical Dictionary key from https://dictionaryapi.com"
+                 (mw-thesaurus--key-help 'medical)))
+  (let* ((mw-thesaurus-medical-api-key "medical-key")
+         (result (mw-thesaurus-test--call
+                  (lambda (_) "[]")
+                  (lambda () (mw-thesaurus--lookup-word "xqzvbnwpt" 'medical)))))
+    (should (equal '("No Merriam-Webster medical dictionary entry for \"xqzvbnwpt\"")
+                   (plist-get result :messages)))))
 
 (ert-deftest mw-thesaurus-switch-to-tab-test ()
   (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
