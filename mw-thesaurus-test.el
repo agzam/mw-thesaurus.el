@@ -1572,6 +1572,24 @@ nothing.  Return a plist of the request URLs and the messages."
     (should (string-match-p "/medical/json/aspirin\\?key=medical-key\\'"
                             (car (plist-get result :urls))))))
 
+(ert-deftest mw-thesaurus-switch-reference-past-spanish-without-its-key-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (mw-thesaurus-spanish-api-key nil)
+         (mw-thesaurus-medical-api-key "medical-key")
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages
+                  (list "aspirin" "* aspirin\n" 'synonym-chooser nil '("aspirin")))
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   ;; o goes from the Synonym Chooser to Medical, as Spanish is hidden.
+                   (mw-thesaurus-switch-reference)
+                   (should (eq 'medical mw-thesaurus--reference)))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should (string-match-p "/medical/json/aspirin\\?" (car (plist-get result :urls))))))
+
 (ert-deftest mw-thesaurus-medical-lookup-messages-test ()
   (should (equal "Set `mw-thesaurus-medical-api-key' to a Medical Dictionary key from https://dictionaryapi.com"
                  (mw-thesaurus--key-help 'medical)))
@@ -1585,6 +1603,7 @@ nothing.  Return a plist of the request URLs and the messages."
 (ert-deftest mw-thesaurus-switch-to-tab-test ()
   (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
          (mw-thesaurus-spanish-api-key nil)
+         (mw-thesaurus-medical-api-key nil)
          (result
           (unwind-protect
               (mw-thesaurus-test--with-api
@@ -1593,6 +1612,9 @@ nothing.  Return a plist of the request URLs and the messages."
                   (list "decline" "* decline ~verb~\n" 'dictionary nil
                         (mw-thesaurus-test--dictionary-entries "decline")))
                  (with-current-buffer mw-thesaurus-buffer-name
+                   (should (equal (list 'user-error "Set `mw-thesaurus-medical-api-key' to a Medical Dictionary key from https://dictionaryapi.com")
+                                  (should-error (mw-thesaurus-switch-to-tab 5)
+                                                :type 'user-error)))
                    ;; M-3 as a window system sends it, then again on the tab shown.
                    (dotimes (_ 2)
                      (let ((last-command-event ?\M-3))
