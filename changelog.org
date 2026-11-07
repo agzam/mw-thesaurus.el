@@ -3,7 +3,7 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
-* [Unreleased]
+* [2.1.0] - 2026-11-06
 
 ** Added
 - a third tab in the header line, Synonym Chooser, shows how the dictionary tells close synonyms apart, as "Choose the Right Synonym" does on merriam-webster.com: the words compared, in italics, what sets each apart, and an example of each
