@@ -47,6 +47,10 @@
 (defvar mw-thesaurus-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map [remap org-open-at-point] #'mw-thesaurus-browse)
+    ;; Evil takes plain digits for counts; a minor mode that binds M-digits,
+    ;; such as winum, outranks this map and keeps them.
+    (dolist (digit '("1" "2" "3" "4"))
+      (define-key map (kbd (concat "M-" digit)) #'mw-thesaurus-switch-to-tab))
     map)
   "Keymap for `mw-thesaurus-mode'.
 Single keys go in `mw-thesaurus-read-only-map'.")
@@ -141,7 +145,10 @@ A click on another label shows its tab, which the label carries."
                  (propertize label
                              'face 'shadow
                              'mouse-face 'header-line-highlight
-                             'help-echo (format "mouse-1: show the word in the %s" label)
+                             'help-echo (format "mouse-1, M-%d: show the word in the %s"
+                                                (1+ (seq-position
+                                                     (seq-filter #'symbolp mw-thesaurus--tabs) tab))
+                                                label)
                              'mw-thesaurus-tab tab
                              'local-map mw-thesaurus--header-line-map))))
            (mw-thesaurus--page-tabs) "   ")))
@@ -1106,6 +1113,21 @@ request."
         (setq mw-thesaurus--lookups (1+ mw-thesaurus--lookups))
         (mw-thesaurus--show-tab tab))
        (t (mw-thesaurus--lookup-word mw-thesaurus--word tab))))))
+
+(defun mw-thesaurus-switch-to-tab (n)
+  "Show the page's word in tab N of the header line, counting from 1.
+Interactively, N is the digit typed with Meta.  N names a tab of
+`mw-thesaurus--tabs', so a hidden tab keeps its number and says why
+it is hidden."
+  (interactive (list (- (event-basic-type last-command-event) ?0)))
+  (with-current-buffer (or (get-buffer mw-thesaurus-buffer-name)
+                           (user-error "No Merriam-Webster page to switch from"))
+    (let ((tab (nth (1- n) (seq-filter #'symbolp mw-thesaurus--tabs))))
+      (cond ((eq tab mw-thesaurus--reference))
+            ((memq tab (mw-thesaurus--page-tabs)) (mw-thesaurus-switch-reference tab))
+            ((not (mw-thesaurus--key tab)) (user-error "%s" (mw-thesaurus--key-help tab)))
+            (t (user-error "No %s entry for \"%s\""
+                           (mw-thesaurus--source mw-thesaurus--no-entry) mw-thesaurus--word))))))
 
 (defun mw-thesaurus--page-reference ()
   "Return the reference of the page: the dictionary for a Synonym Chooser."

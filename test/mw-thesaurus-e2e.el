@@ -218,6 +218,9 @@ A case that expects a page expects a dictionary page.  See
                :lines ("^  Merriam-Webster doesn't explain how the synonyms of \"glad\" differ\\.$")
                :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'"
                :lookups 2 :requests 3))
+     ("M-2 shows the Dictionary" :text ,mw-e2e--happy :point 10 :tags (flow)
+      :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "M-2") (wait-done 6))
+      :expect (:shows "^\\* happy " :reference dictionary :current "Dictionary" :lookups 2))
      ("click Spanish with its key" :text "The rodeo came to town.\n" :point 6 :tags (flow)
       :steps ((eval (setq mw-thesaurus-spanish-api-key ,mw-e2e--spanish-key))
               (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)

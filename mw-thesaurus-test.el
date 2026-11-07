@@ -1511,6 +1511,56 @@ Return a plist of the request URLs and the messages."
             (should (equal '(synonym-chooser) (plist-get result :references)))))
       (kill-buffer mw-thesaurus-buffer-name))))
 
+(ert-deftest mw-thesaurus-mode-meta-digits-show-tabs-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    (dolist (key '("M-1" "M-2" "M-3" "M-4"))
+      (should (eq #'mw-thesaurus-switch-to-tab (key-binding (kbd key)))))
+    ;; A writable page keeps them, as they type no text.
+    (let ((buffer-read-only nil))
+      (should (eq #'mw-thesaurus-switch-to-tab (key-binding (kbd "M-2")))))
+    (setq mw-thesaurus--reference 'dictionary)
+    (let ((line (mw-thesaurus--header-line)))
+      (should (equal "mouse-1, M-3: show the word in the Synonym Chooser"
+                     (get-text-property (string-match "Synonym" line) 'help-echo line))))))
+
+(ert-deftest mw-thesaurus-switch-to-tab-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (mw-thesaurus-spanish-api-key nil)
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages
+                  (list "decline" "* decline ~verb~\n" 'dictionary nil
+                        (mw-thesaurus-test--dictionary-entries "decline")))
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   ;; M-3 as a window system sends it, then again on the tab shown.
+                   (dotimes (_ 2)
+                     (let ((last-command-event ?\M-3))
+                       (call-interactively #'mw-thesaurus-switch-to-tab)))
+                   (should (eq 'synonym-chooser mw-thesaurus--reference))
+                   ;; A terminal sends ESC, then the digit.
+                   (let ((last-command-event ?1))
+                     (call-interactively #'mw-thesaurus-switch-to-tab))
+                   (should (eq 'thesaurus mw-thesaurus--reference))
+                   (should (equal (list 'user-error "Set `mw-thesaurus-spanish-api-key' to a Spanish-English Dictionary key from https://dictionaryapi.com")
+                                  (should-error (mw-thesaurus-switch-to-tab 4)
+                                                :type 'user-error))))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should (string-match-p "/thesaurus/json/decline\\?" (car (plist-get result :urls))))))
+
+(ert-deftest mw-thesaurus-switch-to-tab-left-out-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (cl-letf (((symbol-function 'url-retrieve) (lambda (&rest _) (error "No request"))))
+          (mw-thesaurus-test--pages
+           (list "famously" "* famously ~adverb~\n" 'dictionary 'thesaurus '("famously")))
+          (should (equal '(user-error "No Merriam-Webster entry for \"famously\"")
+                         (should-error (mw-thesaurus-switch-to-tab 1) :type 'user-error))))
+      (kill-buffer mw-thesaurus-buffer-name))))
+
 (ert-deftest mw-thesaurus-header-line-shows-spanish-with-its-key-test ()
   (with-temp-buffer
     (mw-thesaurus-mode)
