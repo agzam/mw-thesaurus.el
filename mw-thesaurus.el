@@ -362,8 +362,9 @@ The sense may hold italics, as in {dxt|be||{it}auxiliary verb{/it} 5}.")
   "Return TEXT without a leading colon, which would make an Org line fixed-width."
   (replace-regexp-in-string "\\`: *" "" text))
 
-(defun mw-thesaurus--join (strings separator)
-  "Join the non-nil STRINGS with SEPARATOR; return nil if none is left."
+(defun mw-thesaurus--join (separator strings)
+  "Join the non-nil STRINGS with SEPARATOR; return nil if none is left.
+STRINGS comes last, so the call can end a `thread-last'."
   (when-let* ((strings (delq nil strings)))
     (string-join strings separator)))
 
@@ -446,15 +447,14 @@ Each is (LEVEL . BULLET): \"1.\" at level 0, \"a.\" at 1, \"1)\" at 2."
   "Return the VARIANTS of a headword in Org bold, or nil if there are none.
 A sense of the Spanish-English Dictionary names this way the phrase it
 translates, as in \"or to set down\"."
-  (mw-thesaurus--join
-   (mapcar (lambda (variant)
-             (concat (when-let* ((label (alist-get 'vl variant))) (concat label " "))
-                     ;; A variant marks its syllables with * as a headword does.
-                     "*" (replace-regexp-in-string
-                          "\\*" "" (mw-thesaurus--dictionary-text (alist-get 'va variant)))
-                     "*"))
-           variants)
-   ", "))
+  (thread-last variants
+    (mapcar (lambda (variant)
+              (concat (when-let* ((label (alist-get 'vl variant))) (concat label " "))
+                      ;; A variant marks its syllables with * as a headword does.
+                      "*" (replace-regexp-in-string
+                           "\\*" "" (mw-thesaurus--dictionary-text (alist-get 'va variant)))
+                      "*")))
+    (mw-thesaurus--join ", ")))
 
 (defun mw-thesaurus--dictionary-sense (sense base)
   "Format SENSE as Org list items BASE columns in, followed by its examples.
@@ -464,11 +464,10 @@ The examples line up with the text of the last item."
          (lead (when (eq 'text (caar parts)) (cdr (pop parts))))
          (labels (append (alist-get 'sls sense) (alist-get 'lbs sense)))
          (prefix (mw-thesaurus--join
-                  (list (when labels (mw-thesaurus--italic (string-join labels ", ")))
-                        (mw-thesaurus--variants (alist-get 'vrs sense)))
-                  " "))
+                  " " (list (when labels (mw-thesaurus--italic (string-join labels ", ")))
+                            (mw-thesaurus--variants (alist-get 'vrs sense)))))
          (text (if prefix
-                   (mw-thesaurus--join (list prefix lead) " ")
+                   (mw-thesaurus--join " " (list prefix lead))
                  (when lead (replace-regexp-in-string "\\`\\(?:: *\\|— \\)" "" lead))))
          (items (mapcar (lambda (bullet)
                           (concat (make-string (+ base (* 3 (car bullet))) ?\s) (cdr bullet)))
@@ -477,7 +476,7 @@ The examples line up with the text of the last item."
          (divided (alist-get 'sdsense sense)))
     (concat (mapconcat (lambda (item) (concat item "\n")) (butlast items) "")
             (when-let* ((line (if items
-                                  (mw-thesaurus--join (list (car (last items)) text) " ")
+                                  (mw-thesaurus--join " " (list (car (last items)) text))
                                 (when text (concat body text)))))
               (concat line "\n"))
             (mw-thesaurus--dictionary-lines parts body)
@@ -512,42 +511,44 @@ DEPTH is that of the heading DEF goes under, 1 by default."
   "Return non-nil if the headword of dictionary ENTRY is Spanish."
   (equal "es" (alist-get 'lang (alist-get 'meta entry))))
 
+(defun mw-thesaurus--dictionary-pronunciation (language pronunciation)
+  "Return PRONUNCIATION as text, or nil if it has no written form.
+One with a recording is a link that plays it; LANGUAGE is \"es/\" for
+the recording of a Spanish headword, else empty."
+  ;; A sound one may leave out comes in italics; parentheses show it in a
+  ;; link and in a terminal as well.
+  (when-let* ((written (alist-get 'mw pronunciation))
+              (sound (replace-regexp-in-string "{it}\\([^{]*\\){/it}" "(\\1)" written)))
+    (concat (when-let* ((label (alist-get 'l pronunciation)))
+              (mw-thesaurus--face (concat label " ") 'mw-thesaurus-pronunciation))
+            (if-let* ((audio (alist-get 'audio (alist-get 'sound pronunciation))))
+                (format "[[mw-thesaurus-audio:%s%s][%s]]" language audio sound)
+              (mw-thesaurus--face sound 'mw-thesaurus-pronunciation)))))
+
+(defun mw-thesaurus--dictionary-inflection (inflection)
+  "Return INFLECTION as text, such as \"plural rodeos\", or nil without a form."
+  (when-let* ((form (or (alist-get 'if inflection) (alist-get 'ifc inflection))))
+    (concat (when-let* ((label (alist-get 'il inflection))) (concat label " "))
+            (replace-regexp-in-string "\\*" "" form))))
+
 (defun mw-thesaurus--dictionary-headlines (entry)
   "Return the syllables and pronunciations of ENTRY, then its forms, as lines.
 A pronunciation with a recording is a link that plays it."
   (let ((headword (alist-get 'hw (alist-get 'hwi entry)))
         (language (if (mw-thesaurus--spanish-p entry) "es/" "")))
-    (mapconcat
-     (lambda (line) (if line (concat "  " line "\n") ""))
-     (list
-      (mw-thesaurus--join
-       (cons (when (string-match-p "\\*" headword)
-               (mw-thesaurus--face (replace-regexp-in-string "\\*" "·" headword)
-                                   'mw-thesaurus-syllables))
-             (mapcar (lambda (pronunciation)
-                       ;; A sound one may leave out comes in italics; parentheses
-                       ;; show it in a link and in a terminal as well.
-                       (when-let* ((written (alist-get 'mw pronunciation))
-                                   (sound (replace-regexp-in-string
-                                           "{it}\\([^{]*\\){/it}" "(\\1)" written)))
-                         (concat (when-let* ((label (alist-get 'l pronunciation)))
-                                   (mw-thesaurus--face (concat label " ")
-                                                       'mw-thesaurus-pronunciation))
-                                 (if-let* ((audio (alist-get 'audio (alist-get 'sound pronunciation))))
-                                     (format "[[mw-thesaurus-audio:%s%s][%s]]" language audio sound)
-                                   (mw-thesaurus--face sound 'mw-thesaurus-pronunciation)))))
-                     (alist-get 'prs (alist-get 'hwi entry))))
-       " ")
-      (mw-thesaurus--join
-       (mapcar (lambda (inflection)
-                 (when-let* ((form (or (alist-get 'if inflection)
-                                       (alist-get 'ifc inflection))))
-                   (concat (when-let* ((label (alist-get 'il inflection)))
-                             (concat label " "))
-                           (replace-regexp-in-string "\\*" "" form))))
-               (alist-get 'ins entry))
-       "; "))
-     "")))
+    (thread-last
+      (list (thread-last (alist-get 'prs (alist-get 'hwi entry))
+              (mapcar (apply-partially #'mw-thesaurus--dictionary-pronunciation language))
+              (cons (when (string-match-p "\\*" headword)
+                      (mw-thesaurus--face (replace-regexp-in-string "\\*" "·" headword)
+                                          'mw-thesaurus-syllables)))
+              (mw-thesaurus--join " "))
+            (thread-last (alist-get 'ins entry)
+              (mapcar #'mw-thesaurus--dictionary-inflection)
+              (mw-thesaurus--join "; ")))
+      (delq nil)
+      (mapcar (lambda (line) (concat "  " line "\n")))
+      (apply #'concat))))
 
 (defun mw-thesaurus--dictionary-history (entry)
   "Return the etymology and first known use of ENTRY as an Org subtree, or nil."
