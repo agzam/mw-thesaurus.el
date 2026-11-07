@@ -212,7 +212,8 @@ A case that expects a page expects a dictionary page.  See
               (eval (xterm-mouse-mode 1)) (click "Synonym Chooser") (wait-done 6)
               (eval (xterm-mouse-mode -1)))
       :expect (:shows "^\\* glad " :reference thesaurus :current "Thesaurus"
-               :echo "No Synonym Chooser for \"glad\"" :header "\\` Thesaurus   Dictionary\\'"
+               :echo "No Synonym Chooser for \"glad\""
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'"
                :lookups 2 :requests 3))
      ("o twice before the answer" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (eval (mw-e2e-slow-replies 2))
@@ -287,7 +288,7 @@ A case that expects a page expects a dictionary page.  See
      ("dwim, word only the dictionary has" :text "It is famously hard.\n" :point 9 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done))
       :expect (:shows "^\\* famously " :reference dictionary :current "Dictionary"
-               :header "\\` Dictionary\\'" :windows 2 :lookups 1))
+               :header "\\` Dictionary   Synonym Chooser\\'" :windows 2 :lookups 1))
      ("dictionary prompt, word only the thesaurus has" :text "\n" :point 1 :tags (flow)
       :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt) (type "drain away")
               (keys "Enter") (wait-done))
@@ -308,7 +309,7 @@ A case that expects a page expects a dictionary page.  See
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
               (search "celebrated") (keys "Enter") (wait-done 6)
               (profile-keys ("l") ("H")) (pause 1))
-      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
+      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary   Synonym Chooser\\'"
                :lookups 2))
      ("o on a page only the thesaurus has" :text "\n" :point 1 :tags (flow)
       :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt) (type "drain away")
@@ -325,7 +326,7 @@ A case that expects a page expects a dictionary page.  See
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
               (eval (xterm-mouse-mode 1)) (click "Dictionary") (pause 2)
               (eval (xterm-mouse-mode -1)))
-      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
+      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary   Synonym Chooser\\'"
                :lookups 1))
      ("back after o on a page only one reference has" :text "It is famously hard.\n"
       :point 9 :tags (flow)
@@ -338,7 +339,7 @@ A case that expects a page expects a dictionary page.  See
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done)
               (search "celebrated") (keys "Enter") (wait-done 6)
               (profile-keys ("l") ("H")) (pause 1) (keys "o") (pause 1))
-      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
+      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary   Synonym Chooser\\'"
                :error "No Merriam-Webster entry for \"famously\"" :lookups 2))
      ("o after RET from a page only one reference has" :text "It is famously hard.\n"
       :point 9 :tags (flow)
@@ -356,7 +357,7 @@ A case that expects a page expects a dictionary page.  See
      ("at-point command, word only the dictionary has" :text "It is famously hard.\n"
       :point 9 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-at-point") (wait-done))
-      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
+      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary   Synonym Chooser\\'"
                :windows 2 :hook t))
      ("dictionary region, phrase only the thesaurus has" :text "Hope can drain away.\n"
       :point 10 :tags (flow)
@@ -534,7 +535,7 @@ A case that expects a page expects a dictionary page.  See
     (mw-e2e--word-case "word run" "run" :shows "^\\* run " :only "\\<\\(run\\|ran\\)\\>")
     (mw-e2e--word-case "word good" "good" :shows "^\\* good " :only "\\<[Gg]ood\\>")
     (mw-e2e--word-case "word Both" "Both" :shows "^\\* both " :reference 'dictionary
-                       :header "\\` Dictionary\\'")
+                       :header "\\` Dictionary   Synonym Chooser\\'")
     (mw-e2e--word-case "word the" "the" :shows "^\\* the " :reference 'dictionary)
     (mw-e2e--word-case "word and" "and" :shows "^\\* and " :reference 'dictionary)
     (mw-e2e--word-case "word neither" "neither" :shows "^\\* neither " :only "neither")
@@ -552,7 +553,7 @@ A case that expects a page expects a dictionary page.  See
     (mw-e2e--word-case "closest word notoriously" "notoriously" :shows "^\\* notorious "
                        :echo "showing \"notorious\"")
     (mw-e2e--word-case "missing famously" "famously" :shows "^\\* famously "
-                       :reference 'dictionary :header "\\` Dictionary\\'" :lookups 1)
+                       :reference 'dictionary :header "\\` Dictionary   Synonym Chooser\\'" :lookups 1)
     (mw-e2e--word-case "missing Famously" "Famously" :shows "^\\* famously "
                        :reference 'dictionary)
     (mw-e2e--word-case "missing FAMOUSLY" "FAMOUSLY" :shows "^\\* famously "
@@ -777,7 +778,7 @@ A case that expects a page expects a dictionary page.  See
      ("upgrade, then a word only the dictionary has" :text "It is famously hard.\n" :point 9
       :tags (env upgrade)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (keys "o") (pause 1))
-      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary\\'"
+      :expect (:shows "^\\* famously " :reference dictionary :header "\\` Dictionary   Synonym Chooser\\'"
                :error "No Merriam-Webster entry for \"famously\"" :lookups 1))))
   "The cases: (LABEL :text :point :tags :steps :expect).
 Steps are (cmd NAME), (keys KEY...) in tmux names, (type TEXT),

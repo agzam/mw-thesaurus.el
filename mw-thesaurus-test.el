@@ -957,19 +957,19 @@ answers the kept request whose URL matches a regexp."
           mw-thesaurus--no-entry 'thesaurus
           mw-thesaurus--dictionary-entries '("famously"))
     (let ((line (mw-thesaurus--header-line)))
-      (should (equal " Dictionary" (substring-no-properties line)))
+      (should (equal " Dictionary   Synonym Chooser" (substring-no-properties line)))
       (should (eq 'bold (get-text-property 1 'face line))))))
 
-(ert-deftest mw-thesaurus-header-line-shows-the-synonym-chooser-test ()
+(ert-deftest mw-thesaurus-header-line-keeps-the-synonym-chooser-test ()
   (with-temp-buffer
     (mw-thesaurus-mode)
     (cl-flet ((header () (substring-no-properties (mw-thesaurus--header-line))))
-      ;; Until the page asks the dictionary.
+      ;; Before the page asks the dictionary, and for words with nothing to show.
       (should (equal " Thesaurus   Dictionary   Synonym Chooser" (header)))
       (setq mw-thesaurus--dictionary-entries (mw-thesaurus-test--dictionary-entries "set"))
-      (should (equal " Thesaurus   Dictionary" (header)))
+      (should (equal " Thesaurus   Dictionary   Synonym Chooser" (header)))
       (setq mw-thesaurus--dictionary-entries '("drain away"))
-      (should (equal " Thesaurus   Dictionary" (header)))
+      (should (equal " Thesaurus   Dictionary   Synonym Chooser" (header)))
       (setq mw-thesaurus--dictionary-entries (mw-thesaurus-test--dictionary-entries "decline")
             mw-thesaurus--reference 'synonym-chooser)
       (let ((line (mw-thesaurus--header-line)))
@@ -1143,11 +1143,11 @@ Each page is the arguments of `mw-thesaurus--create-buffer'."
            '("famously" "* famously ~adverb~\n" dictionary thesaurus ("famously"))
            '("celebrated" "* celebrated ~adjective~\n" dictionary nil ("celebrated")))
           (with-current-buffer mw-thesaurus-buffer-name
-            (should (equal " Thesaurus   Dictionary"
+            (should (equal " Thesaurus   Dictionary   Synonym Chooser"
                            (substring-no-properties (mw-thesaurus--header-line))))
             (mw-thesaurus-back)
             (should (equal "famously" mw-thesaurus--word))
-            (should (equal " Dictionary"
+            (should (equal " Dictionary   Synonym Chooser"
                            (substring-no-properties (mw-thesaurus--header-line))))))
       (kill-buffer mw-thesaurus-buffer-name))))
 
@@ -1261,15 +1261,18 @@ any word.  Return a plist of the request URLs and the messages."
                  (with-current-buffer mw-thesaurus-buffer-name
                    (should (eq 'thesaurus mw-thesaurus--reference))
                    (should (equal "* set ~verb~\n" (buffer-string)))
-                   (should (equal " Thesaurus   Dictionary"
+                   (should (equal " Thesaurus   Dictionary   Synonym Chooser"
                                   (substring-no-properties (mw-thesaurus--header-line))))
-                   ;; The answer makes the Dictionary page, and o skips the hidden tab.
+                   ;; The page keeps the answer, so the second click asks nothing.
+                   (mw-thesaurus-switch-reference 'synonym-chooser)
+                   ;; The answer makes the Dictionary page; o passes over the empty tab.
                    (mw-thesaurus-switch-reference)
                    (should (eq 'dictionary mw-thesaurus--reference))
                    (mw-thesaurus-switch-reference)
                    (should (eq 'thesaurus mw-thesaurus--reference)))))
             (kill-buffer mw-thesaurus-buffer-name))))
-    (should (equal '("No Synonym Chooser for \"set\"") (plist-get result :messages)))
+    (should (equal '("No Synonym Chooser for \"set\"" "No Synonym Chooser for \"set\"")
+                   (plist-get result :messages)))
     (should (equal 2 (length (plist-get result :urls))))
     (should (string-match-p "/collegiate/json/set\\?" (nth 0 (plist-get result :urls))))
     (should (string-match-p "/thesaurus/json/set\\?" (nth 1 (plist-get result :urls))))))

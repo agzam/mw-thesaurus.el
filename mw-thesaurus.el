@@ -118,17 +118,12 @@ The Synonym Chooser shows how the dictionary tells close synonyms apart.")
 
 (defun mw-thesaurus--page-tabs ()
   "Return the tabs the page shows, in the order of `mw-thesaurus--tabs'.
-It leaves out `mw-thesaurus--no-entry', and the Synonym Chooser when the
-dictionary has no entry for the word or no synonym discussion."
-  (seq-remove
-   (lambda (tab)
-     (or (eq tab mw-thesaurus--no-entry)
-         (and (eq tab 'synonym-chooser)
-              (or (eq mw-thesaurus--no-entry 'dictionary)
-                  (and mw-thesaurus--dictionary-entries
-                       (not (mw-thesaurus--discussed
-                             (cdr mw-thesaurus--dictionary-entries))))))))
-   (seq-filter #'symbolp mw-thesaurus--tabs)))
+It leaves out `mw-thesaurus--no-entry'; a page without a dictionary entry
+also leaves out the Synonym Chooser, which shows the dictionary's answer."
+  (seq-difference (seq-filter #'symbolp mw-thesaurus--tabs)
+                  (if (eq mw-thesaurus--no-entry 'dictionary)
+                      '(synonym-chooser dictionary)
+                    (list mw-thesaurus--no-entry))))
 
 (defun mw-thesaurus--header-line ()
   "Return the header line: the tabs of the page, the one shown in bold.
@@ -498,16 +493,18 @@ A pronunciation with a recording is a link that plays it."
             (when function (concat " ~" function "~"))
             "\n")))
 
+(defun mw-thesaurus--dictionary-cognate (cognate)
+  "Return COGNATE, a cross-reference such as \"past tense of go\", as a line."
+  (concat "  " (alist-get 'cxl cognate) " "
+          (mapconcat (lambda (target) (alist-get 'cxt target))
+                     (alist-get 'cxtis cognate) ", ")
+          "\n"))
+
 (defun mw-thesaurus--dictionary-entry (entry)
   "Format ENTRY, a parsed Collegiate Dictionary entry, as an Org subtree."
   (concat (mw-thesaurus--dictionary-heading entry)
           (mw-thesaurus--dictionary-headlines entry)
-          (mapconcat (lambda (cognate)
-                       (concat "  " (alist-get 'cxl cognate) " "
-                               (mapconcat (lambda (target) (alist-get 'cxt target))
-                                          (alist-get 'cxtis cognate) ", ")
-                               "\n"))
-                     (alist-get 'cxs entry) "")
+          (mapconcat #'mw-thesaurus--dictionary-cognate (alist-get 'cxs entry) "")
           (mapconcat #'mw-thesaurus--dictionary-def (alist-get 'def entry) "")
           (mw-thesaurus--dictionary-history entry)))
 
@@ -519,33 +516,36 @@ A pronunciation with a recording is a link that plays it."
   "Return the dictionary ENTRIES that discuss their synonyms."
   (seq-filter (lambda (entry) (alist-get 'syns entry)) entries))
 
-(defun mw-thesaurus--small-caps (text)
-  "Return TEXT with its small capitals in italics, a run of them as a list.
-A synonym discussion sets the words it compares in small capitals."
-  (replace-regexp-in-string
-   "{\\(/?\\)sc}" "{\\1it}"
-   (replace-regexp-in-string "{/sc} +{sc}" "{/sc}, {sc}" text)))
+(defun mw-thesaurus--no-discussion-p ()
+  "Non-nil when the page knows the dictionary discusses no synonym of its word."
+  (and mw-thesaurus--dictionary-entries
+       (not (mw-thesaurus--discussed (cdr mw-thesaurus--dictionary-entries)))))
+
+(defun mw-thesaurus--small-caps (part)
+  "Return PART of a synonym discussion with its small capitals in italics.
+A discussion sets the words it compares in small capitals; a run of them
+becomes a list separated by commas."
+  (if (equal "text" (car part))
+      (list "text" (thread-last (cadr part)
+                     (replace-regexp-in-string "{/sc} +{sc}" "{/sc}, {sc}")
+                     (replace-regexp-in-string "{\\(/?\\)sc}" "{\\1it}")))
+    part))
+
+(defun mw-thesaurus--chooser-entry (entry)
+  "Format the synonym discussions of the dictionary ENTRY as an Org subtree.
+A sentence sits 2 columns in, its example 4."
+  (concat (mw-thesaurus--dictionary-heading entry)
+          (thread-last (alist-get 'syns entry)
+            (seq-mapcat (lambda (discussion) (alist-get 'pt discussion)))
+            (mapcar #'mw-thesaurus--small-caps)
+            (mw-thesaurus--dictionary-dt)
+            (mapcar (lambda (part)
+                      (concat (if (eq 'text (car part)) "  " "    ") (cdr part) "\n")))
+            (apply #'concat))))
 
 (defun mw-thesaurus--chooser-parse (entries)
-  "Format the synonym discussions of the dictionary ENTRIES as Org text.
-Each entry with one is a heading; its examples sit deeper than its text."
-  (mapconcat
-   (lambda (entry)
-     (concat
-      (mw-thesaurus--dictionary-heading entry)
-      (mapconcat
-       (lambda (part)
-         (concat (if (eq 'text (car part)) "  " "    ") (cdr part) "\n"))
-       (mw-thesaurus--dictionary-dt
-        (seq-mapcat (lambda (discussion)
-                      (mapcar (lambda (part)
-                                (if (equal "text" (car part))
-                                    (list "text" (mw-thesaurus--small-caps (cadr part)))
-                                  part))
-                              (alist-get 'pt discussion)))
-                    (alist-get 'syns entry)))
-       "")))
-   (mw-thesaurus--discussed entries) ""))
+  "Format the synonym discussions of the dictionary ENTRIES as Org text."
+  (mapconcat #'mw-thesaurus--chooser-entry (mw-thesaurus--discussed entries) ""))
 
 (defun mw-thesaurus--audio-url (audio)
   "Return the URL of the Merriam-Webster recording named AUDIO."
@@ -960,8 +960,7 @@ With no synonym discussion among them, keep the page and say so."
                    (mw-thesaurus--dictionary-parse entries)
                  (mw-thesaurus--chooser-parse entries))))
     (if (string-empty-p text)
-        (progn (force-mode-line-update)
-               (message "No Synonym Chooser for \"%s\"" mw-thesaurus--word))
+        (message "No Synonym Chooser for \"%s\"" mw-thesaurus--word)
       (mw-thesaurus--create-buffer mw-thesaurus--word text tab mw-thesaurus--no-entry))))
 
 (defun mw-thesaurus--lookup-chooser (word)
@@ -977,6 +976,14 @@ The page keeps the answer, so its Dictionary tab needs no request."
          (mw-thesaurus--show-tab 'synonym-chooser))))
    (setq mw-thesaurus--lookups (1+ mw-thesaurus--lookups))))
 
+(defun mw-thesaurus--next-tab ()
+  "Return the tab after the page's in the header line.
+It passes over a Synonym Chooser the page knows to be empty."
+  (let ((tabs (mw-thesaurus--page-tabs)))
+    (when (mw-thesaurus--no-discussion-p)
+      (setq tabs (remq 'synonym-chooser tabs)))
+    (cadr (memq mw-thesaurus--reference (append tabs tabs)))))
+
 (defun mw-thesaurus-switch-reference (&optional tab)
   "Show the page's word in TAB, by default the next tab of the header line.
 Interactively, TAB is that of the label clicked.  The Dictionary and the
@@ -985,8 +992,7 @@ request."
   (interactive (list (mw-thesaurus--clicked-tab last-input-event)))
   (with-current-buffer (or (get-buffer mw-thesaurus-buffer-name)
                            (user-error "No Merriam-Webster page to switch from"))
-    (let* ((tabs (mw-thesaurus--page-tabs))
-           (tab (or tab (cadr (memq mw-thesaurus--reference (append tabs tabs))))))
+    (let ((tab (or tab (mw-thesaurus--next-tab))))
       (cond
        ((memq tab (list nil mw-thesaurus--reference))
         (user-error "No %s entry for \"%s\""
