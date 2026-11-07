@@ -76,7 +76,7 @@ The header line names the tabs, Thesaurus, Dictionary and Synonym Chooser, and m
 
 ~RET~ lookup for the word at the cursor (lets you "drill" into definition further), in the reference shown; from the Synonym Chooser, in the dictionary
 
-~o~ show the word in the next tab, passing over an empty Synonym Chooser
+~o~ show the word in the next tab
 
 ~l~ (~H~ with evil) go back to the previous lookup, without a new request
 

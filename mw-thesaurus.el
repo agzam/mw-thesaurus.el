@@ -516,11 +516,6 @@ A pronunciation with a recording is a link that plays it."
   "Return the dictionary ENTRIES that discuss their synonyms."
   (seq-filter (lambda (entry) (alist-get 'syns entry)) entries))
 
-(defun mw-thesaurus--no-discussion-p ()
-  "Non-nil when the page knows the dictionary discusses no synonym of its word."
-  (and mw-thesaurus--dictionary-entries
-       (not (mw-thesaurus--discussed (cdr mw-thesaurus--dictionary-entries)))))
-
 (defun mw-thesaurus--small-caps (part)
   "Return PART of a synonym discussion with its small capitals in italics.
 A discussion sets the words it compares in small capitals; a run of them
@@ -543,9 +538,13 @@ A sentence sits 2 columns in, its example 4."
                       (concat (if (eq 'text (car part)) "  " "    ") (cdr part) "\n")))
             (apply #'concat))))
 
-(defun mw-thesaurus--chooser-parse (entries)
-  "Format the synonym discussions of the dictionary ENTRIES as Org text."
-  (mapconcat #'mw-thesaurus--chooser-entry (mw-thesaurus--discussed entries) ""))
+(defun mw-thesaurus--chooser-parse (entries word)
+  "Format the synonym discussions of the dictionary ENTRIES as Org text.
+Without one, the page says that Merriam-Webster has none for WORD."
+  (if-let* ((discussed (mw-thesaurus--discussed entries)))
+      (mapconcat #'mw-thesaurus--chooser-entry discussed "")
+    (format "* %s\n  Merriam-Webster doesn't explain how the synonyms of \"%s\" differ.\n"
+            word word)))
 
 (defun mw-thesaurus--audio-url (audio)
   "Return the URL of the Merriam-Webster recording named AUDIO."
@@ -953,15 +952,14 @@ MISSED-WORD is the word whose suggestion WORD is."
      lookup)))
 
 (defun mw-thesaurus--show-tab (tab)
-  "Show the page's dictionary entries in TAB, `dictionary' or `synonym-chooser'.
-With no synonym discussion among them, keep the page and say so."
-  (let* ((entries (cdr mw-thesaurus--dictionary-entries))
-         (text (if (eq tab 'dictionary)
-                   (mw-thesaurus--dictionary-parse entries)
-                 (mw-thesaurus--chooser-parse entries))))
-    (if (string-empty-p text)
-        (message "No Synonym Chooser for \"%s\"" mw-thesaurus--word)
-      (mw-thesaurus--create-buffer mw-thesaurus--word text tab mw-thesaurus--no-entry))))
+  "Show the page's dictionary entries in TAB, `dictionary' or `synonym-chooser'."
+  (let ((entries (cdr mw-thesaurus--dictionary-entries)))
+    (mw-thesaurus--create-buffer
+     mw-thesaurus--word
+     (if (eq tab 'dictionary)
+         (mw-thesaurus--dictionary-parse entries)
+       (mw-thesaurus--chooser-parse entries mw-thesaurus--word))
+     tab mw-thesaurus--no-entry)))
 
 (defun mw-thesaurus--lookup-chooser (word)
   "Ask the dictionary about WORD, the page's word, and show its Synonym Chooser.
@@ -976,14 +974,6 @@ The page keeps the answer, so its Dictionary tab needs no request."
          (mw-thesaurus--show-tab 'synonym-chooser))))
    (setq mw-thesaurus--lookups (1+ mw-thesaurus--lookups))))
 
-(defun mw-thesaurus--next-tab ()
-  "Return the tab after the page's in the header line.
-It passes over a Synonym Chooser the page knows to be empty."
-  (let ((tabs (mw-thesaurus--page-tabs)))
-    (when (mw-thesaurus--no-discussion-p)
-      (setq tabs (remq 'synonym-chooser tabs)))
-    (cadr (memq mw-thesaurus--reference (append tabs tabs)))))
-
 (defun mw-thesaurus-switch-reference (&optional tab)
   "Show the page's word in TAB, by default the next tab of the header line.
 Interactively, TAB is that of the label clicked.  The Dictionary and the
@@ -992,7 +982,8 @@ request."
   (interactive (list (mw-thesaurus--clicked-tab last-input-event)))
   (with-current-buffer (or (get-buffer mw-thesaurus-buffer-name)
                            (user-error "No Merriam-Webster page to switch from"))
-    (let ((tab (or tab (mw-thesaurus--next-tab))))
+    (let* ((tabs (mw-thesaurus--page-tabs))
+           (tab (or tab (cadr (memq mw-thesaurus--reference (append tabs tabs))))))
       (cond
        ((memq tab (list nil mw-thesaurus--reference))
         (user-error "No %s entry for \"%s\""

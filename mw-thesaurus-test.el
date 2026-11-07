@@ -84,7 +84,7 @@ The zero-width spaces around italics are left out."
 The zero-width spaces around italics are left out."
   (replace-regexp-in-string
    "\u200b" ""
-   (mw-thesaurus--chooser-parse (cdr (mw-thesaurus-test--dictionary-entries word)))))
+   (mw-thesaurus--chooser-parse (cdr (mw-thesaurus-test--dictionary-entries word)) word)))
 
 (ert-deftest mw-thesaurus--chooser-parse-test ()
   (should (equal (mw-thesaurus-test--asset "chooser-decline.org")
@@ -99,7 +99,9 @@ The zero-width spaces around italics are left out."
   (dolist (word mw-thesaurus-test--dictionary-words)
     (should-not (string-match-p "[{}]" (mw-thesaurus-test--chooser word))))
   (dolist (word '("set" "cowl" "both" "tearaway" "borstal" "went" "been"))
-    (should (equal "" (mw-thesaurus-test--chooser word)))))
+    (should (equal (format "* %s\n  Merriam-Webster doesn't explain how the synonyms of \"%s\" differ.\n"
+                           word word)
+                   (mw-thesaurus-test--chooser word)))))
 
 (ert-deftest mw-thesaurus--dictionary-parse-leaves-no-markup-test ()
   (dolist (word mw-thesaurus-test--dictionary-words)
@@ -1103,8 +1105,9 @@ Each page is the arguments of `mw-thesaurus--create-buffer'."
     (unwind-protect
         (progn
           (mw-thesaurus-test--pages '("decline" "* decline ~verb~\n" dictionary nil ("decline")))
-          (let ((result (mw-thesaurus-test--call (lambda (_) "[]")
-                                                 #'mw-thesaurus-switch-reference)))
+          (let ((result (mw-thesaurus-test--call
+                         (lambda (_) "[]")
+                         (lambda () (mw-thesaurus-switch-reference 'thesaurus)))))
             (should (string-match-p "/thesaurus/json/decline\\?"
                                     (car (plist-get result :urls))))
             ;; The buffer shows the dictionary's entry already.
@@ -1125,15 +1128,39 @@ Each page is the arguments of `mw-thesaurus--create-buffer'."
     (unwind-protect
         (progn
           (mw-thesaurus-test--pages
-           '("famously" "* famously ~adverb~\n" dictionary thesaurus ("famously")))
+           '("drain away" "* drain (away) ~verb~\n" thesaurus dictionary))
           (let ((result (mw-thesaurus-test--call
                          #'mw-thesaurus-test--entry
                          (lambda ()
-                           (should (equal '(user-error "No Merriam-Webster entry for \"famously\"")
+                           (should (equal '(user-error
+                                            "No Merriam-Webster dictionary entry for \"drain away\"")
                                           (should-error (mw-thesaurus-switch-reference)
                                                         :type 'user-error)))))))
             (should-not (plist-get result :urls))))
       (kill-buffer mw-thesaurus-buffer-name))))
+
+(ert-deftest mw-thesaurus-switch-reference-on-a-page-only-the-dictionary-has-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (entries (list "famously" '((meta (stems . ["famously"]))
+                                     (hwi (hw . "fa*mous*ly"))
+                                     (fl . "adverb"))))
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages
+                  (list "famously" "* famously ~adverb~\n" 'dictionary 'thesaurus entries))
+                 (mw-thesaurus-switch-reference)
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (should (eq 'synonym-chooser mw-thesaurus--reference))
+                   (should (string-match-p "doesn't explain how the synonyms of \"famously\""
+                                           (buffer-string)))
+                   (should (equal " Dictionary   Synonym Chooser"
+                                  (substring-no-properties (mw-thesaurus--header-line))))
+                   (mw-thesaurus-switch-reference)
+                   (should (eq 'dictionary mw-thesaurus--reference)))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should-not (plist-get result :urls))))
 
 (ert-deftest mw-thesaurus-back-to-a-page-without-the-other-entry-test ()
   (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
@@ -1259,20 +1286,21 @@ any word.  Return a plist of the request URLs and the messages."
                  (mw-thesaurus-test--pages '("set" "* set ~verb~\n"))
                  (mw-thesaurus-switch-reference 'synonym-chooser)
                  (with-current-buffer mw-thesaurus-buffer-name
-                   (should (eq 'thesaurus mw-thesaurus--reference))
-                   (should (equal "* set ~verb~\n" (buffer-string)))
+                   (should (eq 'synonym-chooser mw-thesaurus--reference))
+                   (should (equal (concat "* set\n  Merriam-Webster doesn't explain how the"
+                                          " synonyms of \"set\" differ.\n")
+                                  (buffer-string)))
                    (should (equal " Thesaurus   Dictionary   Synonym Chooser"
                                   (substring-no-properties (mw-thesaurus--header-line))))
-                   ;; The page keeps the answer, so the second click asks nothing.
-                   (mw-thesaurus-switch-reference 'synonym-chooser)
-                   ;; The answer makes the Dictionary page; o passes over the empty tab.
+                   (mw-thesaurus-switch-reference)
+                   (should (eq 'thesaurus mw-thesaurus--reference))
+                   ;; The thesaurus page keeps the dictionary's answer for the word.
                    (mw-thesaurus-switch-reference)
                    (should (eq 'dictionary mw-thesaurus--reference))
                    (mw-thesaurus-switch-reference)
-                   (should (eq 'thesaurus mw-thesaurus--reference)))))
+                   (should (eq 'synonym-chooser mw-thesaurus--reference)))))
             (kill-buffer mw-thesaurus-buffer-name))))
-    (should (equal '("No Synonym Chooser for \"set\"" "No Synonym Chooser for \"set\"")
-                   (plist-get result :messages)))
+    (should-not (plist-get result :messages))
     (should (equal 2 (length (plist-get result :urls))))
     (should (string-match-p "/collegiate/json/set\\?" (nth 0 (plist-get result :urls))))
     (should (string-match-p "/thesaurus/json/set\\?" (nth 1 (plist-get result :urls))))))
