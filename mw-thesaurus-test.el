@@ -103,6 +103,108 @@ The zero-width spaces around italics are left out."
                            word word)
                    (mw-thesaurus-test--chooser word)))))
 
+(defun mw-thesaurus-test--spanish (word)
+  "Return the Org text of the Spanish-English response for WORD in ./assets.
+The zero-width spaces around italics are left out."
+  (replace-regexp-in-string
+   "\u200b" ""
+   (mw-thesaurus--dictionary-parse
+    (mw-thesaurus-test--read
+     (mw-thesaurus-test--asset (format "spanish-%s.json" word))))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-spanish-test ()
+  (should (equal (concat "* language ~noun~\n"
+                         "  [[mw-thesaurus-audio:langua01][ˈlæŋɡwɪʤ]]\n"
+                         "  1. idioma /masculine/, lengua /feminine/\n"
+                         "     the English language — el idioma inglés\n"
+                         "  2. lenguaje /masculine/\n"
+                         "     body language — lenguaje corporal\n"
+                         "* sign language ~noun~\n"
+                         "  lenguaje /masculine/ por señas\n")
+                 (mw-thesaurus-test--spanish "language")))
+  ;; One English and one Spanish headword.
+  (should (equal (concat "* rodeo ~noun~\n"
+                         "  ˈroːdiˌoː roˈdeɪˌoː\n"
+                         "  plural rodeos\n"
+                         "  rodeo /masculine/\n"
+                         "* rodeo ~masculine noun~ :Spanish:\n"
+                         "  1. rodeo, roundup\n"
+                         "  2. desvío : detour\n"
+                         "  3. evasion\n"
+                         "     andar con rodeos — to beat around the bush\n"
+                         "     sin rodeos — without reservations\n")
+                 (mw-thesaurus-test--spanish "rodeo"))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-spanish-recording-test ()
+  (should (string-match-p
+           "^  \\[\\[mw-thesaurus-audio:es/hola001sp\\]\\[ˈola\\]\\]$"
+           (mw-thesaurus--dictionary-parse
+            (mw-thesaurus-test--read
+             (concat "[{\"meta\":{\"id\":\"hola\",\"lang\":\"es\",\"stems\":[\"hola\"]},"
+                     "\"hwi\":{\"hw\":\"hola\",\"prs\":[{\"mw\":\"ˈola\","
+                     "\"sound\":{\"audio\":\"hola001sp\"}}]},\"fl\":\"interjection\"}]"))))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-spanish-variants-test ()
+  ;; A sense that translates a phrase with the headword starts with the phrase.
+  (should (string-match-p "^  2\\. \\*ponerse rojo\\* : to blush$"
+                          (mw-thesaurus-test--spanish "rojo")))
+  (should (string-match-p "^  5\\. \\*¡ni hablar!\\* : no way!$"
+                          (mw-thesaurus-test--spanish "hablar")))
+  (should (string-match-p "^   9\\. \\*to run away\\* : salir corriendo$"
+                          (mw-thesaurus-test--spanish "ran")))
+  (should (string-match-p
+           "^  1\\. or \\*to set down\\* place : poner$"
+           (mw-thesaurus--dictionary-parse
+            (mw-thesaurus-test--read
+             (concat "[{\"meta\":{\"id\":\"set:1\",\"stems\":[\"set\"]},\"hwi\":{\"hw\":\"set\"},"
+                     "\"fl\":\"verb\",\"def\":[{\"sseq\":[[[\"sense\",{\"sn\":\"1\","
+                     "\"vrs\":[{\"vl\":\"or\",\"va\":\"to set down\"}],"
+                     "\"dt\":[[\"text\",\"{sx|place||} {bc}{a_link|poner}\"]]}]]]}]}]")))))
+  ;; A Collegiate variant marks its syllables as a headword does.
+  (should (string-match-p
+           "^  1\\. or ancient \\*Lutetia\\* city on the Seine$"
+           (mw-thesaurus--dictionary-parse
+            (mw-thesaurus-test--read
+             (concat "[{\"meta\":{\"id\":\"Paris\",\"stems\":[\"Paris\"]},\"hwi\":{\"hw\":\"Par*is\"},"
+                     "\"fl\":\"geographical name\",\"def\":[{\"sseq\":[[[\"sense\",{\"sn\":\"1\","
+                     "\"vrs\":[{\"vl\":\"or ancient\",\"va\":\"Lu*te*tia\"}],"
+                     "\"dt\":[[\"text\",\"city on the Seine\"]]}]]]}]}]"))))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-spanish-entry-parts-test ()
+  ;; The feminine form follows the headword.
+  (should (string-match-p "^\\* rojo, roja ~adjective~ :Spanish:$"
+                          (mw-thesaurus-test--spanish "rojo")))
+  ;; A past tense points at its verb.
+  (should (string-prefix-p "* ran\n  → run\n* run ~verb~\n" (mw-thesaurus-test--spanish "ran")))
+  ;; A phrase such as a reflexive verb gets its own subtree.
+  (should (string-match-p
+           (concat "^\\*\\* hablarse\n"
+                   "   1\\. to speak to each other, to be on speaking terms\n"
+                   "   2\\. \\*se habla inglés (etc\\.)\\* : English (etc\\.) spoken\n")
+           (mw-thesaurus-test--spanish "hablar")))
+  ;; A sound that may be left out goes in parentheses.
+  (should (string-match-p "f(ə)l\\]\\]$" (mw-thesaurus-test--spanish "beautiful")))
+  (dolist (word '("language" "rodeo" "rojo" "hablar" "ran" "beautiful"))
+    (should-not (string-match-p "[{}]" (mw-thesaurus-test--spanish word)))))
+
+(ert-deftest mw-thesaurus--dictionary-dt-gender-forms-test ()
+  (let ((parts (mw-thesaurus--dictionary-dt
+                '(("text" "{bc}{a_link|salvadoreño} ") ("gl" "masculine") ("text" ", ")
+                  ("gwds" ((gwc . "-ña") (gwd . "salvadoreña"))) ("text" " ")
+                  ("gl" "feminine")))))
+    (should (equal 1 (length parts)))
+    (should (equal ": salvadoreño /masculine/, salvadoreña /feminine/"
+                   (replace-regexp-in-string "\u200b" "" (cdar parts))))))
+
+(ert-deftest mw-thesaurus--own-entries-phrase-under-to-test ()
+  ;; The Spanish-English Dictionary lists "give up" as "to give up" under "give".
+  (let ((data (mw-thesaurus-test--read
+               (concat "[{\"meta\":{\"id\":\"give:1\",\"stems\":[\"give\",\"to give up\"]},"
+                       "\"hwi\":{\"hw\":\"give\"}}]"))))
+    (should (equal '("give:1")
+                   (mapcar (lambda (entry) (alist-get 'id (alist-get 'meta entry)))
+                           (mw-thesaurus--own-entries data "give up"))))))
+
 (ert-deftest mw-thesaurus--dictionary-parse-leaves-no-markup-test ()
   (dolist (word mw-thesaurus-test--dictionary-words)
     (let ((org (mw-thesaurus-test--dictionary word)))
@@ -549,6 +651,36 @@ WORDS and SUGGESTIONS make the fake API, see `mw-thesaurus-test--lookup'."
     (should (equal '("Merriam-Webster dictionary: Invalid API key. Not subscribed for this reference.  Set `mw-thesaurus-dictionary-api-key' to a Collegiate Dictionary key from https://dictionaryapi.com")
                    (plist-get result :messages)))))
 
+(ert-deftest mw-thesaurus--key-of-a-blank-variable-test ()
+  (dolist (key '(nil "" "  " "\t\n"))
+    (let ((mw-thesaurus-dictionary-api-key key)
+          (mw-thesaurus-spanish-api-key key))
+      (should-not (mw-thesaurus--key 'dictionary))
+      (should-not (mw-thesaurus--key 'spanish))))
+  (let ((mw-thesaurus-spanish-api-key "spanish-key"))
+    (should (equal "spanish-key" (mw-thesaurus--key 'spanish)))))
+
+(ert-deftest mw-thesaurus-spanish-lookup-without-a-key-test ()
+  (let* ((mw-thesaurus-spanish-api-key nil)
+         (result (mw-thesaurus-test--call
+                  #'mw-thesaurus-test--entry
+                  (lambda ()
+                    (should (equal (list 'user-error "Set `mw-thesaurus-spanish-api-key' to a Spanish-English Dictionary key from https://dictionaryapi.com")
+                                   (should-error (mw-thesaurus--lookup-word "rodeo" 'spanish)
+                                                 :type 'user-error)))))))
+    (should-not (plist-get result :urls))))
+
+(ert-deftest mw-thesaurus-spanish-lookup-shows-key-error-test ()
+  (let* ((mw-thesaurus-spanish-api-key "spanish-key")
+         (result (mw-thesaurus-test--call
+                  (lambda (_) "Invalid API key. Not subscribed for this reference.")
+                  (lambda () (mw-thesaurus--lookup-word "rodeo" 'spanish)))))
+    (should (equal (list (concat mw-thesaurus--spanish-api-url "rodeo?key=spanish-key"))
+                   (plist-get result :urls)))
+    (should-not (plist-get result :rendered))
+    (should (equal '("Merriam-Webster Spanish-English: Invalid API key. Not subscribed for this reference.  Set `mw-thesaurus-spanish-api-key' to a Spanish-English Dictionary key from https://dictionaryapi.com")
+                   (plist-get result :messages)))))
+
 (defun mw-thesaurus-test--prompt (word command thesaurus dictionary)
   "Type WORD at the prompt of COMMAND, called in an empty buffer.
 THESAURUS and DICTIONARY answer each reference's requests, see
@@ -901,14 +1033,16 @@ answers the kept request whose URL matches a regexp."
           (dolist (page '(("give up" "* give up ~verb~\n" dictionary)
                           ("happy" "* happy ~adjective~\n" thesaurus)
                           ("hap·py" "* happy ~adjective~\n" dictionary)
-                          ("decline" "* decline ~verb~\n" synonym-chooser)))
+                          ("decline" "* decline ~verb~\n" synonym-chooser)
+                          ("sin rodeos" "* rodeo ~masculine noun~ :Spanish:\n" spanish)))
             (mw-thesaurus-test--pages page)
             ;; From any buffer, as with M-x.
             (with-temp-buffer (mw-thesaurus-browse)))
           (should (equal '("https://www.merriam-webster.com/dictionary/give%20up"
                            "https://www.merriam-webster.com/thesaurus/happy"
                            "https://www.merriam-webster.com/dictionary/happy"
-                           "https://www.merriam-webster.com/dictionary/decline")
+                           "https://www.merriam-webster.com/dictionary/decline"
+                           "https://www.nglish.com/spanish/en/sin%20rodeos")
                          (nreverse urls))))
       (kill-buffer mw-thesaurus-buffer-name))
     (should-error (mw-thesaurus-browse) :type 'user-error)))
@@ -1217,18 +1351,27 @@ Each page is the arguments of `mw-thesaurus--create-buffer'."
 
 (defun mw-thesaurus-test--with-api (body)
   "Call BODY with a fake API and pages that no window shows.
-The dictionary answers from ./assets, the thesaurus with an entry for
-any word.  Return a plist of the request URLs and the messages."
+The dictionary answers from ./assets, the thesaurus with an entry for any
+word, the Spanish-English Dictionary from ./assets or with nothing.
+Return a plist of the request URLs and the messages."
   (let ((dictionary (mw-thesaurus-test--fake-api
                      (lambda (word)
                        (mw-thesaurus-test--asset (format "dictionary-%s.json" word)))))
+        (spanish (mw-thesaurus-test--fake-api
+                  (lambda (word)
+                    (let ((file (format "spanish-%s.json" word)))
+                      (if (file-exists-p (expand-file-name file "assets"))
+                          (mw-thesaurus-test--asset file)
+                        "[]")))))
         (thesaurus (mw-thesaurus-test--fake-api #'mw-thesaurus-test--entry))
         urls messages)
     (cl-letf (((symbol-function 'switch-to-buffer-other-window) #'ignore)
               ((symbol-function 'url-retrieve)
                (lambda (url &rest args)
                  (push url urls)
-                 (apply (if (string-match-p "/collegiate/" url) dictionary thesaurus)
+                 (apply (cond ((string-match-p "/collegiate/" url) dictionary)
+                              ((string-match-p "/spanish/" url) spanish)
+                              (t thesaurus))
                         url args)))
               ((symbol-function 'message)
                (lambda (fmt &rest args) (push (apply #'format fmt args) messages))))
@@ -1368,13 +1511,97 @@ any word.  Return a plist of the request URLs and the messages."
             (should (equal '(synonym-chooser) (plist-get result :references)))))
       (kill-buffer mw-thesaurus-buffer-name))))
 
+(ert-deftest mw-thesaurus-header-line-shows-spanish-with-its-key-test ()
+  (with-temp-buffer
+    (mw-thesaurus-mode)
+    (cl-flet ((header () (substring-no-properties (mw-thesaurus--header-line))))
+      (dolist (key '(nil "" "  "))
+        (let ((mw-thesaurus-spanish-api-key key))
+          (should (equal " Thesaurus   Dictionary   Synonym Chooser" (header)))))
+      (let ((mw-thesaurus-spanish-api-key "spanish-key"))
+        (should (equal " Thesaurus   Dictionary   Synonym Chooser   Spanish" (header)))
+        (setq mw-thesaurus--reference 'spanish)
+        (let ((line (mw-thesaurus--header-line)))
+          (should (eq 'bold (get-text-property (string-match "Spanish" line) 'face line))))
+        ;; A page whose word the Spanish-English Dictionary lacks.
+        (setq mw-thesaurus--reference 'dictionary
+              mw-thesaurus--no-entry 'spanish)
+        (should (equal " Thesaurus   Dictionary   Synonym Chooser" (header)))))))
+
+(ert-deftest mw-thesaurus-switch-reference-to-spanish-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (mw-thesaurus-spanish-api-key "spanish-key")
+         (entries '("rodeo" ((meta (stems "rodeo")) (hwi (hw . "rodeo")) (fl . "noun"))))
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages
+                  (list "rodeo" "* rodeo ~noun~\n" 'dictionary nil entries))
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (mw-thesaurus-switch-reference 'spanish)
+                   (should (eq 'spanish mw-thesaurus--reference))
+                   (should (equal (mw-thesaurus-test--spanish "rodeo")
+                                  (replace-regexp-in-string "\u200b" "" (buffer-string))))
+                   ;; The page keeps the dictionary's answer for the word.
+                   (mw-thesaurus-switch-reference 'dictionary)
+                   (should (eq 'dictionary mw-thesaurus--reference))
+                   (mw-thesaurus-back)
+                   (should (eq 'spanish mw-thesaurus--reference))
+                   ;; o goes on from the last tab to the first.
+                   (mw-thesaurus-switch-reference)
+                   (should (eq 'thesaurus mw-thesaurus--reference)))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should-not (plist-get result :messages))
+    (should (equal 2 (length (plist-get result :urls))))
+    (should (string-match-p "/spanish/json/rodeo\\?key=spanish-key\\'"
+                            (nth 0 (plist-get result :urls))))
+    (should (string-match-p "/thesaurus/json/rodeo\\?" (nth 1 (plist-get result :urls))))))
+
+(ert-deftest mw-thesaurus-switch-reference-to-spanish-without-the-word-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (mw-thesaurus-spanish-api-key "spanish-key")
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages '("tearaway" "* tearaway ~noun~\n"))
+                 (mw-thesaurus-switch-reference 'spanish)
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (should (eq 'thesaurus mw-thesaurus--reference)))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should (equal '("No Merriam-Webster Spanish-English entry for \"tearaway\"")
+                   (plist-get result :messages)))))
+
+(ert-deftest mw-thesaurus-lookup-at-point-on-a-spanish-page-test ()
+  (let* ((mw-thesaurus-buffer-name " *mw-thesaurus-test*")
+         (mw-thesaurus-spanish-api-key "spanish-key")
+         (result
+          (unwind-protect
+              (mw-thesaurus-test--with-api
+               (lambda ()
+                 (mw-thesaurus-test--pages
+                  '("language" "* language ~noun~\n  1. idioma, rodeo\n" spanish))
+                 (with-current-buffer mw-thesaurus-buffer-name
+                   (goto-char (point-min))
+                   (search-forward "rod")
+                   (call-interactively #'mw-thesaurus-lookup-at-point)
+                   (should (equal "rodeo" mw-thesaurus--word))
+                   (should (eq 'spanish mw-thesaurus--reference)))))
+            (kill-buffer mw-thesaurus-buffer-name))))
+    (should (equal 1 (length (plist-get result :urls))))
+    (should (string-match-p "/spanish/json/rodeo\\?" (car (plist-get result :urls))))))
+
 (ert-deftest mw-thesaurus--audio-url-test ()
   (dolist (case '(("declin03" . "d/declin03") ("bixcow04" . "bix/bixcow04")
                   ("ggmain01" . "gg/ggmain01") ("3d000001" . "number/3d000001")
                   ("_abc001" . "number/_abc001")))
     (should (equal (concat "https://media.merriam-webster.com/audio/prons/en/us/mp3/"
                            (cdr case) ".mp3")
-                   (mw-thesaurus--audio-url (car case))))))
+                   (mw-thesaurus--audio-url (car case)))))
+  ;; A recording of a Spanish headword.
+  (should (equal "https://media.merriam-webster.com/audio/prons/es/me/mp3/h/hola001sp.mp3"
+                 (mw-thesaurus--audio-url "es/hola001sp"))))
 
 (ert-deftest mw-thesaurus--dictionary-parse-pronunciation-links-test ()
   (let ((org (mw-thesaurus-test--dictionary "decline")))

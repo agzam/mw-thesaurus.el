@@ -45,6 +45,9 @@
 (defconst mw-e2e--flavors '("main" "branch")
   "origin/master's package, then the checkout's.")
 
+(defconst mw-e2e--spanish-key "e2e-spanish-key"
+  "A made-up Spanish-English Dictionary key, see `mw-e2e--seed-spanish'.")
+
 ;;; Cases
 
 (defconst mw-e2e--happy "I feel happy today.\n"
@@ -215,6 +218,30 @@ A case that expects a page expects a dictionary page.  See
                :lines ("^  Merriam-Webster doesn't explain how the synonyms of \"glad\" differ\\.$")
                :header "\\` Thesaurus   Dictionary   Synonym Chooser\\'"
                :lookups 2 :requests 3))
+     ("click Spanish with its key" :text "The rodeo came to town.\n" :point 6 :tags (flow)
+      :steps ((eval (setq mw-thesaurus-spanish-api-key ,mw-e2e--spanish-key))
+              (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)
+              (eval (xterm-mouse-mode 1)) (click "Spanish") (wait-done 6)
+              (eval (xterm-mouse-mode -1)))
+      :expect (:shows "^\\* rodeo " :reference spanish :current "Spanish"
+               :header "\\` Thesaurus   Dictionary   Synonym Chooser   Spanish\\'"
+               :lines ("^\\* rodeo ~masculine noun~ :Spanish:$"
+                       "andar con rodeos — to beat around the bush$")
+               :faces (mw-thesaurus-example) :lookups 2 :requests 2))
+     ("o from the Synonym Chooser to Spanish" :text "The rodeo came to town.\n" :point 6
+      :tags (flow)
+      :steps ((eval (setq mw-thesaurus-spanish-api-key ,mw-e2e--spanish-key))
+              (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)
+              (keys "o") (wait-done 6) (keys "o") (wait-done 6))
+      :expect (:shows "^\\* rodeo " :reference spanish :current "Spanish"
+               :lookups 2 :requests 2))
+     ("C-c C-o on a Spanish page" :text "The rodeo came to town.\n" :point 6 :tags (flow)
+      :steps ((eval (setq mw-thesaurus-spanish-api-key ,mw-e2e--spanish-key))
+              (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)
+              (keys "o") (wait-done 6) (keys "o") (wait-done 6)
+              (keys "C-c" "C-o") (pause 1))
+      :expect (:shows "^\\* rodeo " :reference spanish :lookups 2
+               :browsed "https://www.nglish.com/spanish/en/rodeo"))
      ("o twice before the answer" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((cmd "mw-thesaurus-lookup-dwim") (wait-done) (eval (mw-e2e-slow-replies 2))
               (keys "o" "o") (wait-done 15 3))
@@ -833,6 +860,28 @@ others the flow cases."
     (package-refresh-contents)
     (mapc #'package-install missing)))
 
+(defun mw-e2e--seed-spanish ()
+  "Keep each ./assets/spanish-WORD.json as the answer for WORD.
+The run has no Spanish-English Dictionary key, so its cases send
+`mw-e2e--spanish-key' and get these samples from the answer cache."
+  (load (expand-file-name "mw-thesaurus-e2e-cache.el" mw-e2e--test-dir) nil t)
+  (when mw-e2e-cache
+    (make-directory mw-e2e-cache t)
+    (dolist (file (directory-files (expand-file-name "assets" mw-e2e--root) t
+                                   "\\`spanish-.+\\.json\\'"))
+      (with-temp-buffer
+        (set-buffer-multibyte nil)
+        (insert "HTTP/1.1 200 OK\nContent-Type: application/json\n\n")
+        (insert-file-contents-literally file)
+        (let ((coding-system-for-write 'binary))
+          (write-region nil nil
+                        (mw-e2e--cache-file
+                         (format "%s%s?key=%s"
+                                 "https://www.dictionaryapi.com/api/v3/references/spanish/json/"
+                                 (substring (file-name-base file) (length "spanish-"))
+                                 mw-e2e--spanish-key))
+                        nil 'silent))))))
+
 (defun mw-e2e--main-source ()
   "Write origin/master's mw-thesaurus.el into the run and return its directory."
   (let ((dir (expand-file-name "main/" mw-e2e--dir))
@@ -1227,6 +1276,7 @@ compare."
     (error "No case label matches MW_E2E_CASES %S, an Emacs regexp (\\| between labels)"
            mw-e2e--only))
   (make-directory mw-e2e--dir t)
+  (mw-e2e--seed-spanish)
   (mw-e2e--packages)
   (unwind-protect
       (dolist (profile mw-e2e--profiles)
