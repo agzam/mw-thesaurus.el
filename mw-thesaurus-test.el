@@ -1521,6 +1521,8 @@ nothing.  Return a plist of the request URLs and the messages."
     (mw-thesaurus-mode)
     (dolist (key '("M-1" "M-2" "M-3" "M-4" "M-5"))
       (should (eq #'mw-thesaurus-switch-to-tab (key-binding (kbd key)))))
+    ;; One key per tab, no more.
+    (should-not (eq #'mw-thesaurus-switch-to-tab (key-binding (kbd "M-6"))))
     ;; A writable page keeps them, as they type no text.
     (let ((buffer-read-only nil))
       (should (eq #'mw-thesaurus-switch-to-tab (key-binding (kbd "M-2")))))

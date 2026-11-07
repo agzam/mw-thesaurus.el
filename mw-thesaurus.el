@@ -44,13 +44,20 @@
   :prefix "mw-thesaurus-"
   :group 'applications)
 
+(defconst mw-thesaurus--tabs
+  '(thesaurus "Thesaurus" dictionary "Dictionary" synonym-chooser "Synonym Chooser"
+              spanish "Spanish" medical "Medical")
+  "The tabs of the header line in order, each followed by its label.
+The Synonym Chooser shows how the dictionary tells close synonyms apart.
+Spanish and Medical show the Spanish-English and Medical dictionaries.")
+
 (defvar mw-thesaurus-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map [remap org-open-at-point] #'mw-thesaurus-browse)
     ;; Evil takes plain digits for counts; a minor mode that binds M-digits,
     ;; such as winum, outranks this map and keeps them.
-    (dolist (digit '("1" "2" "3" "4" "5"))
-      (define-key map (kbd (concat "M-" digit)) #'mw-thesaurus-switch-to-tab))
+    (dotimes (n (/ (length mw-thesaurus--tabs) 2))
+      (define-key map (kbd (format "M-%d" (1+ n))) #'mw-thesaurus-switch-to-tab))
     map)
   "Keymap for `mw-thesaurus-mode'.
 Single keys go in `mw-thesaurus-read-only-map'.")
@@ -108,13 +115,6 @@ Each page is a list (WORD TEXT POINT REFERENCE NO-ENTRY DICTIONARY).")
   "The count of lookups started; a request carries its lookup's count.
 A later lookup, a tab switch, going back and quitting raise it, so an
 answer that comes after one of them is dropped.")
-
-(defconst mw-thesaurus--tabs
-  '(thesaurus "Thesaurus" dictionary "Dictionary" synonym-chooser "Synonym Chooser"
-              spanish "Spanish" medical "Medical")
-  "The tabs of the header line in order, each followed by its label.
-The Synonym Chooser shows how the dictionary tells close synonyms apart.
-Spanish and Medical show the Spanish-English and Medical dictionaries.")
 
 (defvar mw-thesaurus--header-line-map
   (let ((map (make-sparse-keymap)))
