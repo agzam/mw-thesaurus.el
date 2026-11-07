@@ -371,21 +371,23 @@ The sense may hold italics, as in {dxt|be||{it}auxiliary verb{/it} 5}.")
   "Return DT with each gender label or form joined to the translation before it.
 The text after one joins too, so the translations share one line, as in
 \"salvadoreño masculine, salvadoreña feminine\"."
-  (let (parts joining)
-    (dolist (part dt (nreverse parts))
-      (if-let* ((tail (and (equal "text" (caar parts))
-                           (pcase part
-                             (`("gl" ,label) (concat " {it}" label "{/it}"))
-                             (`("gwds" ,form) (alist-get 'gwd form))
-                             (`("text" ,text) (and joining text))))))
-          (progn
-            (setcar parts (list "text" (concat (if (equal "gl" (car part))
-                                                   (string-trim-right (cadar parts))
-                                                 (cadar parts))
-                                               tail)))
-            (setq joining (not (equal "text" (car part)))))
-        (push part parts)
-        (setq joining nil)))))
+  (reverse
+   (seq-reduce
+    (lambda (parts pair)
+      (pcase-let ((`(,part . ,previous) pair))
+        (if-let* ((text (and (equal "text" (caar parts)) (cadar parts)))
+                  (joined (pcase part
+                            (`("gl" ,label)
+                             (concat (string-trim-right text) " {it}" label "{/it}"))
+                            (`("gwds" ,form) (concat text (alist-get 'gwd form)))
+                            ((and `("text" ,more)
+                                  (guard (member (car previous) '("gl" "gwds"))))
+                             (concat text more)))))
+            (cons (list "text" joined) (cdr parts))
+          (cons part parts))))
+    ;; Each part with the one before it.
+    (seq-mapn #'cons dt (cons nil dt))
+    nil)))
 
 (defun mw-thesaurus--dictionary-dt (dt)
   "Return the parts of DT, a definition text, as (KIND . TEXT) pairs.
