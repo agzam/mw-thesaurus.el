@@ -3,6 +3,15 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
+* [Unreleased]
+
+** Added
+- a Spanish tab shows the Spanish-English Dictionary, and a Medical tab the Medical Dictionary; each needs a key of your own, in ~mw-thesaurus-spanish-api-key~ or ~mw-thesaurus-medical-api-key~, and stays hidden without one
+- ~M-1~ to ~M-5~ show Thesaurus, Dictionary, Synonym Chooser, Spanish and Medical
+
+** Changed
+- a dictionary page shows the phrase a sense covers in bold, a phrase with its own senses as a subtree, and an alternate headword next to the headword
+
 * [2.1.0] - 2026-11-06
 
 ** Added

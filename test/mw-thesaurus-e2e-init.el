@@ -135,6 +135,7 @@ Each profile copies the readme or a public config that sets up mw-thesaurus."
 (defconst mw-e2e-variables
   '(mw-thesaurus-api-key mw-thesaurus--base-url mw-thesaurus--api-url
     mw-thesaurus-dictionary-api-key mw-thesaurus--dictionary-api-url
+    mw-thesaurus-spanish-api-key mw-thesaurus-medical-api-key
     mw-thesaurus-audio-player exec-path)
   "The variables a case may change.
 1.1.0 keeps the URL in `mw-thesaurus--base-url', later versions in
@@ -314,7 +315,8 @@ Each profile copies the readme or a public config that sets up mw-thesaurus."
                                (seq-find (lambda (label)
                                            (when-let* ((at (mw-e2e--search label line)))
                                              (eq 'bold (get-text-property at 'face line))))
-                                         '("Thesaurus" "Dictionary" "Synonym Chooser")))
+                                         '("Thesaurus" "Dictionary" "Synonym Chooser" "Spanish"
+                                           "Medical")))
                     :hidden (save-excursion
                               (goto-char (point-min))
                               (let ((n 0))

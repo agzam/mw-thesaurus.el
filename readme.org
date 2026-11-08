@@ -30,6 +30,12 @@ People have been actively using the package for many years, and the key still wo
 
 The dictionary uses a second shared key, for the Collegiate Dictionary; a free account can hold keys for two references. To use your own, set ~mw-thesaurus-dictionary-api-key~ the same way.
 
+Two more tabs need keys of your own, as the package ships none: Spanish, for the Spanish-English Dictionary, and Medical, for the Medical Dictionary. Each tab shows only while its key is set:
+#+begin_src emacs-lisp
+(setq mw-thesaurus-spanish-api-key "YOUR-SPANISH-KEY"
+      mw-thesaurus-medical-api-key "YOUR-MEDICAL-KEY")
+#+end_src
+
 It is on [[https://melpa.org/#/mw-thesaurus][MELPA]].
 
 *** use-package example
@@ -72,11 +78,13 @@ If the word has no entry, e.g. because of a typo, the first spelling suggestion 
 Many dictionary entries also explain how close synonyms differ, as "Choose the Right Synonym" does on merriam-webster.com. The Synonym Chooser tab shows these explanations: the words compared, what sets each apart, and an example of each.
 
 * Keys available in mw-thesaurus-mode
-The header line names the tabs, Thesaurus, Dictionary and Synonym Chooser, and marks the one shown; a click on another one switches to it. For a word without a synonym explanation, the Synonym Chooser says so.
+The header line names the tabs, Thesaurus, Dictionary and Synonym Chooser, plus Spanish and Medical when their keys are set, and marks the one shown; a click on another one switches to it. For a word without a synonym explanation, the Synonym Chooser says so.
 
 ~RET~ lookup for the word at the cursor (lets you "drill" into definition further), in the reference shown; from the Synonym Chooser, in the dictionary
 
 ~o~ show the word in the next tab
+
+~M-1~ to ~M-5~ show the word in Thesaurus, Dictionary, Synonym Chooser, Spanish and Medical
 
 ~l~ (~H~ with evil) go back to the previous lookup, without a new request
 

@@ -44,9 +44,20 @@
   :prefix "mw-thesaurus-"
   :group 'applications)
 
+(defconst mw-thesaurus--tabs
+  '(thesaurus "Thesaurus" dictionary "Dictionary" synonym-chooser "Synonym Chooser"
+              spanish "Spanish" medical "Medical")
+  "The tabs of the header line in order, each followed by its label.
+The Synonym Chooser shows how the dictionary tells close synonyms apart.
+Spanish and Medical show the Spanish-English and Medical dictionaries.")
+
 (defvar mw-thesaurus-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map [remap org-open-at-point] #'mw-thesaurus-browse)
+    ;; Evil takes plain digits for counts; a minor mode that binds M-digits,
+    ;; such as winum, outranks this map and keeps them.
+    (dotimes (n (/ (length mw-thesaurus--tabs) 2))
+      (define-key map (kbd (format "M-%d" (1+ n))) #'mw-thesaurus-switch-to-tab))
     map)
   "Keymap for `mw-thesaurus-mode'.
 Single keys go in `mw-thesaurus-read-only-map'.")
@@ -105,11 +116,6 @@ Each page is a list (WORD TEXT POINT REFERENCE NO-ENTRY DICTIONARY).")
 A later lookup, a tab switch, going back and quitting raise it, so an
 answer that comes after one of them is dropped.")
 
-(defconst mw-thesaurus--tabs
-  '(thesaurus "Thesaurus" dictionary "Dictionary" synonym-chooser "Synonym Chooser")
-  "The tabs of the header line in order, each followed by its label.
-The Synonym Chooser shows how the dictionary tells close synonyms apart.")
-
 (defvar mw-thesaurus--header-line-map
   (let ((map (make-sparse-keymap)))
     (define-key map [header-line mouse-1] #'mw-thesaurus-switch-reference)
@@ -118,12 +124,14 @@ The Synonym Chooser shows how the dictionary tells close synonyms apart.")
 
 (defun mw-thesaurus--page-tabs ()
   "Return the tabs the page shows, in the order of `mw-thesaurus--tabs'.
-It leaves out `mw-thesaurus--no-entry'; a page without a dictionary entry
-also leaves out the Synonym Chooser, which shows the dictionary's answer."
+It leaves out `mw-thesaurus--no-entry', and Spanish or Medical without
+its key; a page without a dictionary entry also leaves out the Synonym
+Chooser, which shows the dictionary's answer."
   (seq-difference (seq-filter #'symbolp mw-thesaurus--tabs)
-                  (if (eq mw-thesaurus--no-entry 'dictionary)
-                      '(synonym-chooser dictionary)
-                    (list mw-thesaurus--no-entry))))
+                  (append (seq-remove #'mw-thesaurus--key '(spanish medical))
+                          (if (eq mw-thesaurus--no-entry 'dictionary)
+                              '(synonym-chooser dictionary)
+                            (list mw-thesaurus--no-entry)))))
 
 (defun mw-thesaurus--header-line ()
   "Return the header line: the tabs of the page, the one shown in bold.
@@ -137,7 +145,10 @@ A click on another label shows its tab, which the label carries."
                  (propertize label
                              'face 'shadow
                              'mouse-face 'header-line-highlight
-                             'help-echo (format "mouse-1: show the word in the %s" label)
+                             'help-echo (format "mouse-1, M-%d: show the %s tab"
+                                                (1+ (seq-position
+                                                     (seq-filter #'symbolp mw-thesaurus--tabs) tab))
+                                                label)
                              'mw-thesaurus-tab tab
                              'local-map mw-thesaurus--header-line-map))))
            (mw-thesaurus--page-tabs) "   ")))
@@ -191,6 +202,16 @@ On a read-only page:
   "Merriam-Webster Collegiate Dictionary API access key."
   :type 'string)
 
+(defcustom mw-thesaurus-spanish-api-key nil
+  "Merriam-Webster Spanish-English Dictionary API access key.
+The header line shows the Spanish tab only while this is set."
+  :type '(choice (const :tag "None" nil) string))
+
+(defcustom mw-thesaurus-medical-api-key nil
+  "Merriam-Webster Medical Dictionary API access key.
+The header line shows the Medical tab only while this is set."
+  :type '(choice (const :tag "None" nil) string))
+
 (defcustom mw-thesaurus-audio-player nil
   "Command that plays a pronunciation: a program and its arguments.
 The recording's file comes last.  nil means the first of afplay, mpv,
@@ -214,6 +235,14 @@ ffplay and mpg123 that `executable-find' finds."
 (defconst mw-thesaurus--dictionary-api-url
   "https://www.dictionaryapi.com/api/v3/references/collegiate/json/"
   "Merriam-Webster Collegiate Dictionary API URL.")
+
+(defconst mw-thesaurus--spanish-api-url
+  "https://www.dictionaryapi.com/api/v3/references/spanish/json/"
+  "Merriam-Webster Spanish-English Dictionary API URL.")
+
+(defconst mw-thesaurus--medical-api-url
+  "https://www.dictionaryapi.com/api/v3/references/medical/json/"
+  "Merriam-Webster Medical Dictionary API URL.")
 
 (defconst mw-thesaurus--word-lists
   '((syn_list . "Synonyms")
@@ -333,14 +362,38 @@ The sense may hold italics, as in {dxt|be||{it}auxiliary verb{/it} 5}.")
   "Return TEXT without a leading colon, which would make an Org line fixed-width."
   (replace-regexp-in-string "\\`: *" "" text))
 
-(defun mw-thesaurus--join (strings separator)
-  "Join the non-nil STRINGS with SEPARATOR; return nil if none is left."
+(defun mw-thesaurus--join (separator strings)
+  "Join the non-nil STRINGS with SEPARATOR; return nil if none is left.
+STRINGS comes last, so the call can end a `thread-last'."
   (when-let* ((strings (delq nil strings)))
     (string-join strings separator)))
 
+(defun mw-thesaurus--genders (dt)
+  "Return DT with each gender label or form joined to the translation before it.
+The text after one joins too, so the translations share one line, as in
+\"salvadoreño masculine, salvadoreña feminine\"."
+  (reverse
+   (seq-reduce
+    (lambda (parts pair)
+      (pcase-let ((`(,part . ,previous) pair))
+        (if-let* ((text (and (equal "text" (caar parts)) (cadar parts)))
+                  (joined (pcase part
+                            (`("gl" ,label)
+                             (concat (string-trim-right text) " {it}" label "{/it}"))
+                            (`("gwds" ,form) (concat text (alist-get 'gwd form)))
+                            ((and `("text" ,more)
+                                  (guard (member (car previous) '("gl" "gwds"))))
+                             (concat text more)))))
+            (cons (list "text" joined) (cdr parts))
+          (cons part parts))))
+    ;; Each part with the one before it.
+    (seq-mapn #'cons dt (cons nil dt))
+    nil)))
+
 (defun mw-thesaurus--dictionary-dt (dt)
   "Return the parts of DT, a definition text, as (KIND . TEXT) pairs.
-KIND is `text' or `example'.  Usage notes and notes become text."
+KIND is `text' or `example'.  Usage notes and notes become text.  An
+example ends with its translation, if it has one."
   (seq-mapcat
    (lambda (part)
      (pcase part
@@ -351,6 +404,8 @@ KIND is `text' or `example'.  Usage notes and notes become text."
                   (cons 'example
                         (mw-thesaurus--face
                          (concat (mw-thesaurus--dictionary-text (alist-get t vis))
+                                 (when-let* ((translation (alist-get 'tr vis)))
+                                   (concat " — " (mw-thesaurus--dictionary-text translation)))
                                  (when-let* ((author (alist-get 'auth (alist-get 'aq vis))))
                                    (concat " — " author)))
                          'mw-thesaurus-example)))
@@ -368,7 +423,7 @@ KIND is `text' or `example'.  Usage notes and notes become text."
                                   (mapconcat (lambda (cat) (alist-get 'cat cat))
                                              (alist-get 'cats called) ", ")))))
        (`("snote" ,note) (mw-thesaurus--dictionary-dt note))))
-   dt))
+   (mw-thesaurus--genders dt)))
 
 (defun mw-thesaurus--dictionary-lines (parts indent)
   "Return PARTS of a definition text as Org lines after INDENT."
@@ -388,6 +443,19 @@ Each is (LEVEL . BULLET): \"1.\" at level 0, \"a.\" at 1, \"1)\" at 2."
                   (t (cons 0 (concat part ".")))))
           (and number (split-string number))))
 
+(defun mw-thesaurus--variants (variants)
+  "Return the VARIANTS of a headword in Org bold, or nil if there are none.
+A sense of the Spanish-English Dictionary names this way the phrase it
+translates, as in \"or to set down\"."
+  (thread-last variants
+    (mapcar (lambda (variant)
+              (concat (when-let* ((label (alist-get 'vl variant))) (concat label " "))
+                      ;; A variant marks its syllables with * as a headword does.
+                      "*" (replace-regexp-in-string
+                           "\\*" "" (mw-thesaurus--dictionary-text (alist-get 'va variant)))
+                      "*")))
+    (mw-thesaurus--join ", ")))
+
 (defun mw-thesaurus--dictionary-sense (sense base)
   "Format SENSE as Org list items BASE columns in, followed by its examples.
 Each part of its number is an item: \"5 a\" is \"a.\" in an empty \"5.\".
@@ -395,9 +463,11 @@ The examples line up with the text of the last item."
   (let* ((parts (mw-thesaurus--dictionary-dt (alist-get 'dt sense)))
          (lead (when (eq 'text (caar parts)) (cdr (pop parts))))
          (labels (append (alist-get 'sls sense) (alist-get 'lbs sense)))
-         (text (if labels
-                   (mw-thesaurus--join
-                    (list (mw-thesaurus--italic (string-join labels ", ")) lead) " ")
+         (prefix (mw-thesaurus--join
+                  " " (list (when labels (mw-thesaurus--italic (string-join labels ", ")))
+                            (mw-thesaurus--variants (alist-get 'vrs sense)))))
+         (text (if prefix
+                   (mw-thesaurus--join " " (list prefix lead))
                  (when lead (replace-regexp-in-string "\\`\\(?:: *\\|— \\)" "" lead))))
          (items (mapcar (lambda (bullet)
                           (concat (make-string (+ base (* 3 (car bullet))) ?\s) (cdr bullet)))
@@ -406,7 +476,7 @@ The examples line up with the text of the last item."
          (divided (alist-get 'sdsense sense)))
     (concat (mapconcat (lambda (item) (concat item "\n")) (butlast items) "")
             (when-let* ((line (if items
-                                  (mw-thesaurus--join (list (car (last items)) text) " ")
+                                  (mw-thesaurus--join " " (list (car (last items)) text))
                                 (when text (concat body text)))))
               (concat line "\n"))
             (mw-thesaurus--dictionary-lines parts body)
@@ -425,47 +495,60 @@ The examples line up with the text of the last item."
     (`("bs" ,binding) (mw-thesaurus--dictionary-sense (alist-get 'sense binding) base))
     (`(,(or "sense" "sen") ,sense) (mw-thesaurus--dictionary-sense sense base))))
 
-(defun mw-thesaurus--dictionary-def (def)
-  "Format DEF, the senses under one verb divider, as an Org list."
-  (let* ((divider (alist-get 'vd def))
-         (base (if divider 3 2)))
-    (concat (when divider (concat "** " divider "\n"))
+(defun mw-thesaurus--dictionary-def (def &optional depth)
+  "Format DEF, the senses under one verb divider, as an Org list.
+DEPTH is that of the heading DEF goes under, 1 by default."
+  (let* ((depth (or depth 1))
+         (divider (alist-get 'vd def))
+         (base (+ depth (if divider 2 1))))
+    (concat (when divider (concat (make-string (1+ depth) ?*) " " divider "\n"))
             (when-let* ((labels (alist-get 'sls def)))
               (concat (make-string base ?\s) (mw-thesaurus--italic (string-join labels ", ")) "\n"))
             (mapconcat (lambda (item) (mw-thesaurus--dictionary-item item base))
                        (apply #'append (alist-get 'sseq def)) ""))))
 
+(defun mw-thesaurus--spanish-p (entry)
+  "Return non-nil if the headword of dictionary ENTRY is Spanish."
+  (equal "es" (alist-get 'lang (alist-get 'meta entry))))
+
+(defun mw-thesaurus--dictionary-pronunciation (language pronunciation)
+  "Return PRONUNCIATION as text, or nil if it has no written form.
+One with a recording is a link that plays it; LANGUAGE is \"es/\" for
+the recording of a Spanish headword, else empty."
+  ;; A sound one may leave out comes in italics; parentheses show it in a
+  ;; link and in a terminal as well.
+  (when-let* ((written (alist-get 'mw pronunciation))
+              (sound (replace-regexp-in-string "{it}\\([^{]*\\){/it}" "(\\1)" written)))
+    (concat (when-let* ((label (alist-get 'l pronunciation)))
+              (mw-thesaurus--face (concat label " ") 'mw-thesaurus-pronunciation))
+            (if-let* ((audio (alist-get 'audio (alist-get 'sound pronunciation))))
+                (format "[[mw-thesaurus-audio:%s%s][%s]]" language audio sound)
+              (mw-thesaurus--face sound 'mw-thesaurus-pronunciation)))))
+
+(defun mw-thesaurus--dictionary-inflection (inflection)
+  "Return INFLECTION as text, such as \"plural rodeos\", or nil without a form."
+  (when-let* ((form (or (alist-get 'if inflection) (alist-get 'ifc inflection))))
+    (concat (when-let* ((label (alist-get 'il inflection))) (concat label " "))
+            (replace-regexp-in-string "\\*" "" form))))
+
 (defun mw-thesaurus--dictionary-headlines (entry)
   "Return the syllables and pronunciations of ENTRY, then its forms, as lines.
 A pronunciation with a recording is a link that plays it."
-  (let ((headword (alist-get 'hw (alist-get 'hwi entry))))
-    (mapconcat
-     (lambda (line) (if line (concat "  " line "\n") ""))
-     (list
-      (mw-thesaurus--join
-       (cons (when (string-match-p "\\*" headword)
-               (mw-thesaurus--face (replace-regexp-in-string "\\*" "·" headword)
-                                   'mw-thesaurus-syllables))
-             (mapcar (lambda (pronunciation)
-                       (when-let* ((sound (alist-get 'mw pronunciation)))
-                         (concat (when-let* ((label (alist-get 'l pronunciation)))
-                                   (mw-thesaurus--face (concat label " ")
-                                                       'mw-thesaurus-pronunciation))
-                                 (if-let* ((audio (alist-get 'audio (alist-get 'sound pronunciation))))
-                                     (format "[[mw-thesaurus-audio:%s][%s]]" audio sound)
-                                   (mw-thesaurus--face sound 'mw-thesaurus-pronunciation)))))
-                     (alist-get 'prs (alist-get 'hwi entry))))
-       " ")
-      (mw-thesaurus--join
-       (mapcar (lambda (inflection)
-                 (when-let* ((form (or (alist-get 'if inflection)
-                                       (alist-get 'ifc inflection))))
-                   (concat (when-let* ((label (alist-get 'il inflection)))
-                             (concat label " "))
-                           (replace-regexp-in-string "\\*" "" form))))
-               (alist-get 'ins entry))
-       "; "))
-     "")))
+  (let ((headword (alist-get 'hw (alist-get 'hwi entry)))
+        (language (if (mw-thesaurus--spanish-p entry) "es/" "")))
+    (thread-last
+      (list (thread-last (alist-get 'prs (alist-get 'hwi entry))
+              (mapcar (apply-partially #'mw-thesaurus--dictionary-pronunciation language))
+              (cons (when (string-match-p "\\*" headword)
+                      (mw-thesaurus--face (replace-regexp-in-string "\\*" "·" headword)
+                                          'mw-thesaurus-syllables)))
+              (mw-thesaurus--join " "))
+            (thread-last (alist-get 'ins entry)
+              (mapcar #'mw-thesaurus--dictionary-inflection)
+              (mw-thesaurus--join "; ")))
+      (delq nil)
+      (mapcar (lambda (line) (concat "  " line "\n")))
+      (apply #'concat))))
 
 (defun mw-thesaurus--dictionary-history (entry)
   "Return the etymology and first known use of ENTRY as an Org subtree, or nil."
@@ -487,10 +570,16 @@ A pronunciation with a recording is a link that plays it."
                 (concat "   First known use: " (mw-thesaurus--dictionary-text date) "\n"))))))
 
 (defun mw-thesaurus--dictionary-heading (entry)
-  "Return the Org heading of ENTRY, a dictionary entry: headword and function."
+  "Return the Org heading of ENTRY, a dictionary entry: headwords and function.
+An alternate headword, such as a feminine form, follows the headword.  A
+Spanish headword gets the tag Spanish."
   (let ((function (alist-get 'fl entry)))
-    (concat "* " (replace-regexp-in-string "\\*" "" (alist-get 'hw (alist-get 'hwi entry)))
+    (concat "* "
+            (mapconcat (lambda (hwi) (replace-regexp-in-string "\\*" "" (alist-get 'hw hwi)))
+                       (cons (alist-get 'hwi entry) (alist-get 'ahws entry))
+                       ", ")
             (when function (concat " ~" function "~"))
+            (when (mw-thesaurus--spanish-p entry) " :Spanish:")
             "\n")))
 
 (defun mw-thesaurus--dictionary-cognate (cognate)
@@ -500,12 +589,30 @@ A pronunciation with a recording is a link that plays it."
                      (alist-get 'cxtis cognate) ", ")
           "\n"))
 
+(defun mw-thesaurus--dictionary-cross-references (xrs)
+  "Return XRS, the cross-references of an entry such as \"ran\", as a line.
+Return nil if there are none."
+  (when-let* ((targets (delq nil (mapcar (lambda (target) (alist-get 'xrt target))
+                                         (apply #'append xrs)))))
+    (concat "  → "
+            (mapconcat (lambda (target) (replace-regexp-in-string ":[0-9]+\\'" "" target))
+                       targets ", ")
+            "\n")))
+
+(defun mw-thesaurus--dictionary-phrase (phrase)
+  "Format PHRASE, a phrase with the headword such as \"hablarse\", as a subtree."
+  (concat "** " (mw-thesaurus--dictionary-text (alist-get 'drp phrase)) "\n"
+          (mapconcat (lambda (def) (mw-thesaurus--dictionary-def def 2))
+                     (alist-get 'def phrase) "")))
+
 (defun mw-thesaurus--dictionary-entry (entry)
-  "Format ENTRY, a parsed Collegiate Dictionary entry, as an Org subtree."
+  "Format ENTRY, a Collegiate or Spanish-English Dictionary entry, as a subtree."
   (concat (mw-thesaurus--dictionary-heading entry)
           (mw-thesaurus--dictionary-headlines entry)
           (mapconcat #'mw-thesaurus--dictionary-cognate (alist-get 'cxs entry) "")
+          (mw-thesaurus--dictionary-cross-references (alist-get 'xrs entry))
           (mapconcat #'mw-thesaurus--dictionary-def (alist-get 'def entry) "")
+          (mapconcat #'mw-thesaurus--dictionary-phrase (alist-get 'dros entry) "")
           (mw-thesaurus--dictionary-history entry)))
 
 (defun mw-thesaurus--dictionary-parse (data)
@@ -547,13 +654,17 @@ Without one, the page says that Merriam-Webster has none for WORD."
             word word)))
 
 (defun mw-thesaurus--audio-url (audio)
-  "Return the URL of the Merriam-Webster recording named AUDIO."
-  (format "https://media.merriam-webster.com/audio/prons/en/us/mp3/%s/%s.mp3"
-          (cond ((string-prefix-p "bix" audio) "bix")
-                ((string-prefix-p "gg" audio) "gg")
-                ((string-match-p "\\`[^[:alpha:]]" audio) "number")
-                (t (substring audio 0 1)))
-          audio))
+  "Return the URL of the Merriam-Webster recording named AUDIO.
+The recording of a Spanish headword is named es/NAME."
+  (let* ((spanish (string-prefix-p "es/" audio))
+         (name (if spanish (substring audio 3) audio)))
+    (format "https://media.merriam-webster.com/audio/prons/%s/mp3/%s/%s.mp3"
+            (if spanish "es/me" "en/us")
+            (cond ((string-prefix-p "bix" name) "bix")
+                  ((string-prefix-p "gg" name) "gg")
+                  ((string-match-p "\\`[^[:alpha:]]" name) "number")
+                  (t (substring name 0 1)))
+            name)))
 
 (defun mw-thesaurus--audio-player ()
   "Return the command that plays a recording; signal an error if there is none."
@@ -736,7 +847,11 @@ ends\" for \"both\"."
   (let* ((key (mw-thesaurus--normalize word))
          (entries (seq-filter #'consp data))
          (own-p (lambda (entry)
-                  (seq-some (lambda (stem) (equal key (mw-thesaurus--normalize stem)))
+                  (seq-some (lambda (stem)
+                              (let ((stem (mw-thesaurus--normalize stem)))
+                                ;; The Spanish-English Dictionary lists "give up" as "to give up".
+                                (or (equal key stem)
+                                    (equal key (string-remove-prefix "to " stem)))))
                             (alist-get 'stems (alist-get 'meta entry))))))
     (when (seq-some own-p entries)
       (seq-filter
@@ -839,40 +954,55 @@ Point returns to where it was, and no request goes to Merriam-Webster."
   (setq mw-thesaurus--lookups (1+ mw-thesaurus--lookups))
   (apply #'mw-thesaurus--show (pop mw-thesaurus--history)))
 
+(defun mw-thesaurus--key-variable (reference)
+  "Return the variable that holds the API key of REFERENCE."
+  (pcase reference
+    ('dictionary 'mw-thesaurus-dictionary-api-key)
+    ('spanish 'mw-thesaurus-spanish-api-key)
+    ('medical 'mw-thesaurus-medical-api-key)
+    (_ 'mw-thesaurus-api-key)))
+
 (defun mw-thesaurus--key-help (reference)
   "Return what to do about a missing or refused key for REFERENCE."
-  (format "Set `%s' to a Collegiate %s key from https://dictionaryapi.com"
-          (if (eq reference 'dictionary)
-              'mw-thesaurus-dictionary-api-key
-            'mw-thesaurus-api-key)
-          (capitalize (symbol-name reference))))
+  (format "Set `%s' to a %s key from https://dictionaryapi.com"
+          (mw-thesaurus--key-variable reference)
+          (pcase reference
+            ('dictionary "Collegiate Dictionary")
+            ('spanish "Spanish-English Dictionary")
+            ('medical "Medical Dictionary")
+            (_ "Collegiate Thesaurus"))))
 
 (defun mw-thesaurus--source (reference)
   "Return how the echo area names REFERENCE."
-  (if (eq reference 'dictionary) "Merriam-Webster dictionary" "Merriam-Webster"))
+  (pcase reference
+    ('dictionary "Merriam-Webster dictionary")
+    ('spanish "Merriam-Webster Spanish-English")
+    ('medical "Merriam-Webster medical dictionary")
+    (_ "Merriam-Webster")))
 
 (defun mw-thesaurus--other-reference (reference)
   "Return the reference that is not REFERENCE; nil stands for the thesaurus."
   (if (eq reference 'dictionary) 'thesaurus 'dictionary))
 
 (defun mw-thesaurus--key (reference)
-  "Return the API key of REFERENCE, or nil if it is empty."
-  (let ((key (if (eq reference 'dictionary)
-                 mw-thesaurus-dictionary-api-key
-               mw-thesaurus-api-key)))
-    (unless (string-empty-p (or key "")) key)))
+  "Return the API key of REFERENCE, or nil if it is blank."
+  (let ((key (symbol-value (mw-thesaurus--key-variable reference))))
+    (unless (string-blank-p (or key "")) key)))
 
 (defun mw-thesaurus--request (word reference callback &optional lookup)
   "Ask REFERENCE about WORD, then call CALLBACK with the parsed answer.
 A failed request, or a reply that is not JSON such as a key error, goes
 to the echo area instead.  LOOKUP is the count of the lookup the request
 serves; see `mw-thesaurus--lookups'."
-  (let ((dictionary (eq reference 'dictionary))
-        (key (or (mw-thesaurus--key reference)
+  (let ((key (or (mw-thesaurus--key reference)
                  (user-error "%s" (mw-thesaurus--key-help reference))))
         answered)
     (url-retrieve
-     (concat (if dictionary mw-thesaurus--dictionary-api-url mw-thesaurus--api-url)
+     (concat (pcase reference
+               ('dictionary mw-thesaurus--dictionary-api-url)
+               ('spanish mw-thesaurus--spanish-api-url)
+               ('medical mw-thesaurus--medical-api-url)
+               (_ mw-thesaurus--api-url))
              (url-hexify-string (mw-thesaurus--fold word)) "?key=" key)
      (lambda (status)
        (let ((response (current-buffer)))
@@ -902,10 +1032,13 @@ serves; see `mw-thesaurus--lookups'."
 NO-ENTRY becomes the page's `mw-thesaurus--no-entry'.  A dictionary page
 keeps its entries for the Synonym Chooser."
   (when-let* ((entries (mw-thesaurus--own-entries data word)))
-    (if (eq reference 'dictionary)
-        (mw-thesaurus--create-buffer word (mw-thesaurus--dictionary-parse entries)
-                                     reference no-entry (cons word entries))
-      (mw-thesaurus--create-buffer word (mw-thesaurus--parse entries) reference no-entry))
+    (mw-thesaurus--create-buffer
+     word
+     ;; Spanish-English and medical entries have the layout of the dictionary's.
+     (if (memq reference '(spanish medical dictionary))
+         (mw-thesaurus--dictionary-parse entries)
+       (mw-thesaurus--parse entries))
+     reference no-entry (and (eq reference 'dictionary) (cons word entries)))
     t))
 
 (defun mw-thesaurus--lookup-suggestion (word reference data fallback)
@@ -997,12 +1130,28 @@ request."
         (mw-thesaurus--show-tab tab))
        (t (mw-thesaurus--lookup-word mw-thesaurus--word tab))))))
 
+(defun mw-thesaurus-switch-to-tab (n)
+  "Show the page's word in tab N of the header line, counting from 1.
+Interactively, N is the digit typed with Meta.  N names a tab of
+`mw-thesaurus--tabs', so a hidden tab keeps its number and says why
+it is hidden."
+  (interactive (list (- (event-basic-type last-command-event) ?0)))
+  (with-current-buffer (or (get-buffer mw-thesaurus-buffer-name)
+                           (user-error "No Merriam-Webster page to switch from"))
+    (let ((tab (nth (1- n) (seq-filter #'symbolp mw-thesaurus--tabs))))
+      (cond ((eq tab mw-thesaurus--reference))
+            ((memq tab (mw-thesaurus--page-tabs)) (mw-thesaurus-switch-reference tab))
+            ((not (mw-thesaurus--key tab)) (user-error "%s" (mw-thesaurus--key-help tab)))
+            (t (user-error "No %s entry for \"%s\""
+                           (mw-thesaurus--source mw-thesaurus--no-entry) mw-thesaurus--word))))))
+
 (defun mw-thesaurus--page-reference ()
   "Return the reference of the page: the dictionary for a Synonym Chooser."
   (if (eq mw-thesaurus--reference 'synonym-chooser) 'dictionary mw-thesaurus--reference))
 
 (defun mw-thesaurus-browse ()
   "Open the page of the thesaurus buffer on merriam-webster.com.
+A Spanish page opens on nglish.com, as merriam-webster.com has none.
 On a link of the page, such as a pronunciation, follow the link instead."
   (interactive)
   (if (and (derived-mode-p 'mw-thesaurus-mode)
@@ -1011,10 +1160,11 @@ On a link of the page, such as a pronunciation, follow the link instead."
     (with-current-buffer (or (get-buffer mw-thesaurus-buffer-name)
                              (user-error "No Merriam-Webster page to open"))
       ;; The syllable dots of a word looked up from a dictionary page.
-      (browse-url (format "https://www.merriam-webster.com/%s/%s"
-                          (mw-thesaurus--page-reference)
-                          (url-hexify-string
-                           (replace-regexp-in-string "·" "" mw-thesaurus--word)))))))
+      (let ((word (url-hexify-string (replace-regexp-in-string "·" "" mw-thesaurus--word))))
+        (browse-url (if (eq mw-thesaurus--reference 'spanish)
+                        (concat "https://www.nglish.com/spanish/en/" word)
+                      (format "https://www.merriam-webster.com/%s/%s"
+                              (mw-thesaurus--page-reference) word)))))))
 
 (defun mw-thesaurus-get-original-word (beginning end)
   "Get a word to look for from the user.
@@ -1089,7 +1239,8 @@ page's link, such as a pronunciation, follow the link instead."
   "Look up a thesaurus definition using Merriam-Webster online dictionary.
 `BEGINNING' and `END' correspond to the selected text with a word to look up.
 If there is no selection provided, additional input will be required.
-REFERENCE, the thesaurus by default, can also be `dictionary'."
+REFERENCE, the thesaurus by default, can also be `dictionary', `spanish'
+or `medical'."
   (interactive
    ;; it is a simple interactive function instead of interactive "r"
    ;; because it doesn't produce an error in a buffer without a mark
