@@ -3,7 +3,7 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
-* [Unreleased]
+* [2.2.0] - 2026-11-08
 
 ** Added
 - a Spanish tab shows the Spanish-English Dictionary, and a Medical tab the Medical Dictionary; each needs a key of your own, in ~mw-thesaurus-spanish-api-key~ or ~mw-thesaurus-medical-api-key~, and stays hidden without one

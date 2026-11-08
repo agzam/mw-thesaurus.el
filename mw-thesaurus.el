@@ -6,7 +6,7 @@
 ;; Keywords: wp, matching
 ;; License: GPL v3
 ;; Package-Requires: ((emacs "27.1"))
-;; Version: 2.1.0
+;; Version: 2.2.0
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
