@@ -3,6 +3,12 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
+* [Unreleased]
+
+** Added
+- on a dictionary page, a reference to another entry of the same word links to that entry's heading and names its part of speech: "see decline entry 1" reads "see verb"
+- ~RET~, ~C-c C-o~ or a click on such a link moves to the heading, and ~C-c &~ comes back
+
 * [2.2.0] - 2026-11-08
 
 ** Added
