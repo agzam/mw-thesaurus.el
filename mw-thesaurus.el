@@ -37,6 +37,7 @@
 (require 'seq)
 (require 'subr-x)
 (require 'svg)
+(require 'text-property-search)
 (require 'ucs-normalize)
 
 (defgroup mw-thesaurus nil
@@ -311,19 +312,45 @@ dictionary's recording of it."
    (seq-remove #'stringp data) ""))
 
 (defconst mw-thesaurus--cross-reference-regexp
-  "{\\(?:sx\\|dxt\\)|\\([^|}:]*\\)\\(?::\\([^|}]*\\)\\)?|[^|}]*|\\(\\(?:[^|{}]\\|{/?it}\\)*\\)}"
-  "A cross-reference to a dictionary entry: its word, entry number and sense.
-The sense may hold italics, as in {dxt|be||{it}auxiliary verb{/it} 5}.")
+  "{\\(?:sx\\|dxt\\)|[^|}]*|[^|}]*|\\(?:[^|{}]\\|{/?it}\\)*}"
+  "A cross-reference to a dictionary entry, such as {dxt|stoop:1||3b}.
+Its last field, the sense, may hold italics, as in
+{dxt|be||{it}auxiliary verb{/it} 5}.")
+
+(defvar mw-thesaurus--homographs nil
+  "The page's entries with the headword of the entry being formatted.
+A {dxt} cross-reference to one of them links to its heading.")
 
 (defun mw-thesaurus--cross-reference (token)
-  "Return the text of TOKEN, a cross-reference such as {dxt|stoop:1||3b}."
+  "Return the text of TOKEN, a cross-reference: {KIND|WORD[:ENTRY]|ID|SENSE}.
+ID names the target entry when WORD and ENTRY do not.  A {dxt} reference
+to an entry of `mw-thesaurus--homographs' is a link to its heading,
+labeled with its function, such as verb."
+  ;; The caller, `replace-regexp-in-string', needs its match data back.
   (save-match-data
-    (string-match mw-thesaurus--cross-reference-regexp token)
-    (let ((entry (match-string 2 token))
-          (sense (match-string 3 token)))
-      (concat (match-string 1 token)
-              (when entry (concat " entry " entry))
+    (pcase-let* ((`(,kind ,name ,id ,sense) (split-string (substring token 1 -1) "|"))
+                 (`(,word ,entry) (split-string name ":"))
+                 (target (if (string-empty-p id) name id))
+                 (homograph (and (equal kind "dxt")
+                                 (seq-find (lambda (other)
+                                             (equal target (alist-get 'id (alist-get 'meta other))))
+                                           mw-thesaurus--homographs))))
+      (concat (if homograph
+                  (format "[[mw-thesaurus-entry:%s][%s]]" target (alist-get 'fl homograph))
+                (concat word (when entry (concat " entry " entry))))
               (unless (string-empty-p sense) (concat " sense " sense))))))
+
+(defun mw-thesaurus--goto-entry (id &optional _)
+  "Move point to the heading of the page's entry ID, such as decline:1.
+The place left goes on Org's mark ring, as for an internal Org link."
+  (if-let* ((match (save-excursion
+                     (goto-char (point-min))
+                     (text-property-search-forward 'mw-thesaurus-entry id t))))
+      (progn (org-mark-ring-push)
+             (goto-char (prop-match-beginning match)))
+    (user-error "No entry %s on this page" id)))
+
+(org-link-set-parameters "mw-thesaurus-entry" :follow #'mw-thesaurus--goto-entry)
 
 (defconst mw-thesaurus--dictionary-markup
   `(("{bc}" . ": ")
@@ -569,18 +596,25 @@ A pronunciation with a recording is a link that plays it."
               (when date
                 (concat "   First known use: " (mw-thesaurus--dictionary-text date) "\n"))))))
 
+(defun mw-thesaurus--headword (hwi)
+  "Return the headword of HWI without its syllable marks.
+HWI is the headword information of an entry or an alternate headword."
+  (replace-regexp-in-string "\\*" "" (alist-get 'hw hwi)))
+
 (defun mw-thesaurus--dictionary-heading (entry)
   "Return the Org heading of ENTRY, a dictionary entry: headwords and function.
 An alternate headword, such as a feminine form, follows the headword.  A
-Spanish headword gets the tag Spanish."
+Spanish headword gets the tag Spanish.  The heading's text property
+`mw-thesaurus-entry' holds the entry id that a link to it names."
   (let ((function (alist-get 'fl entry)))
-    (concat "* "
-            (mapconcat (lambda (hwi) (replace-regexp-in-string "\\*" "" (alist-get 'hw hwi)))
-                       (cons (alist-get 'hwi entry) (alist-get 'ahws entry))
-                       ", ")
-            (when function (concat " ~" function "~"))
-            (when (mw-thesaurus--spanish-p entry) " :Spanish:")
-            "\n")))
+    (propertize (concat "* "
+                        (mapconcat #'mw-thesaurus--headword
+                                   (cons (alist-get 'hwi entry) (alist-get 'ahws entry))
+                                   ", ")
+                        (when function (concat " ~" function "~"))
+                        (when (mw-thesaurus--spanish-p entry) " :Spanish:")
+                        "\n")
+                'mw-thesaurus-entry (alist-get 'id (alist-get 'meta entry)))))
 
 (defun mw-thesaurus--dictionary-cognate (cognate)
   "Return COGNATE, a cross-reference such as \"past tense of go\", as a line."
@@ -617,7 +651,16 @@ Return nil if there are none."
 
 (defun mw-thesaurus--dictionary-parse (data)
   "Format the entries in DATA, a parsed dictionary response, as Org text."
-  (mapconcat #'mw-thesaurus--dictionary-entry (seq-filter #'consp data) ""))
+  (let ((entries (seq-filter #'consp data)))
+    (mapconcat (lambda (entry)
+                 (let* ((headword (mw-thesaurus--headword (alist-get 'hwi entry)))
+                        (mw-thesaurus--homographs
+                         (seq-filter (lambda (other)
+                                       (equal headword (mw-thesaurus--headword
+                                                        (alist-get 'hwi other))))
+                                     entries)))
+                   (mw-thesaurus--dictionary-entry entry)))
+               entries "")))
 
 (defun mw-thesaurus--discussed (entries)
   "Return the dictionary ENTRIES that discuss their synonyms."
@@ -1222,11 +1265,15 @@ Look up the region, the word at point, or a word read from the user."
 Interactively, look it up in the reference of the page shown.  On a
 page's link, such as a pronunciation, follow the link instead."
   (interactive (list (point) (mw-thesaurus--page-reference)))
-  (save-mark-and-excursion
-    (goto-char word-point)
-    (if (and (derived-mode-p 'mw-thesaurus-mode)
-             (org-in-regexp org-link-bracket-re 1))
-        (org-open-at-point)
+  (if (and (derived-mode-p 'mw-thesaurus-mode)
+           (save-excursion
+             (goto-char word-point)
+             (org-in-regexp org-link-bracket-re 1)))
+      ;; A link to a page heading moves point, which an excursion would undo.
+      (progn (goto-char word-point)
+             (org-open-at-point))
+    (save-mark-and-excursion
+      (goto-char word-point)
       (unless (mw-thesaurus-is-at-the-beginning-of-word word-point)
         (backward-word))
       (set-mark (point))

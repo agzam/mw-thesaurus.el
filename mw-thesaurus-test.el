@@ -218,6 +218,33 @@ The zero-width spaces around italics are left out."
   (should (string-match-p "^  — compare be sense /auxiliary verb/ 5$"
                           (mw-thesaurus-test--dictionary "been"))))
 
+(defun mw-thesaurus-test--bank ()
+  "Return a dictionary page for bank: two nouns and a verb citing the second.
+The bankroll entry, another word, cites it too."
+  (mw-thesaurus--dictionary-parse
+   (mw-thesaurus-test--read
+    (json-encode
+     (mapcar (pcase-lambda (`(,word ,id ,function ,text))
+               `((meta (id . ,id) (stems . [,word]))
+                 (hwi (hw . ,word))
+                 (fl . ,function)
+                 (def . [((sseq . [[["sense" ((dt . [["text" ,text]]))]]]))])))
+             '(("bank" "bank:1" "noun" "{bc}a mound")
+               ("bank" "bank:2" "noun" "{bc}a place for money")
+               ("bank" "bank:3" "verb"
+                "{bc}to deposit money in a bank {dx_def}see {dxt|bank:2||1a}{/dx_def}")
+               ("bankroll" "bankroll" "noun"
+                "{bc}a supply of money {dx_def}see {dxt|bank:2||}{/dx_def}")))))))
+
+(ert-deftest mw-thesaurus--dictionary-parse-links-entries-of-the-word-test ()
+  (let ((org (mw-thesaurus-test--bank)))
+    ;; The sense the reference names stays as text after the link.
+    (should (string-match-p (concat "^  to deposit money in a bank"
+                                    " (see \\[\\[mw-thesaurus-entry:bank:2\\]\\[noun\\]\\] sense 1a)$")
+                            org))
+    ;; A function would hide which word another word's reference names.
+    (should (string-match-p "^  a supply of money (see bank entry 2)$" org))))
+
 (ert-deftest mw-thesaurus--dictionary-parse-sense-groups-test ()
   (let ((org (mw-thesaurus-test--dictionary "conception")))
     (should (string-match-p
@@ -1060,6 +1087,25 @@ answers the kept request whose URL matches a regexp."
         (call-interactively (key-binding (kbd "C-c C-o")))))
     (should (equal '("declin03") played))
     (should-not urls)))
+
+(ert-deftest mw-thesaurus-ret-follows-a-link-to-an-entry-test ()
+  (let ((mw-thesaurus-buffer-name " *mw-thesaurus-test*"))
+    (unwind-protect
+        (cl-letf (((symbol-function 'url-retrieve) (lambda (&rest _) (error "No lookup expected"))))
+          (mw-thesaurus-test--pages (list "bank" (mw-thesaurus-test--bank) 'dictionary)
+                                    '("sun" "* sun ~noun~\n"))
+          (with-current-buffer mw-thesaurus-buffer-name
+            ;; A page that comes back with l keeps its links working.
+            (mw-thesaurus-back)
+            (search-forward "bank:2][")
+            (let ((link (point)))
+              (call-interactively #'mw-thesaurus-lookup-at-point)
+              ;; The second of the two bank nouns, whose headings read the same.
+              (should (equal "bank:2" (get-text-property (point) 'mw-thesaurus-entry)))
+              (should (looking-at-p "\\* bank ~noun~$"))
+              ;; C-c & goes back, as after an internal Org link.
+              (should (equal link (marker-position (car org-mark-ring)))))))
+      (kill-buffer mw-thesaurus-buffer-name))))
 
 (ert-deftest mw-thesaurus-mode-o-switches-reference-test ()
   (with-temp-buffer
