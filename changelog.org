@@ -3,7 +3,7 @@
 
 Changes to the project, following Keep a Changelog conventions.
 
-* [Unreleased]
+* [2.3.0] - 2026-11-12
 
 ** Added
 - on a dictionary page, a reference to another entry of the same word links to that entry's heading and names its part of speech: "see decline entry 1" reads "see verb"
