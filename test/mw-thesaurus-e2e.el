@@ -299,6 +299,19 @@ A case that expects a page expects a dictionary page.  See
               (eval (mw-e2e-goto-speaker 2)) (keys "Enter") (wait-for (mw-e2e--texts 'outcome)))
       :expect (:shows "^\\* run " :reference thesaurus :lookups 1
                :echo "No Merriam-Webster recording of \"run\""))
+     ("RET follows a link to an entry" :text "\n" :point 1 :tags (flow)
+      :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt) (type "decline")
+              (keys "Enter") (wait-done) (eval (mw-e2e-goto-link "verb")) (keys "Enter") (pause 1))
+      :expect (:shows "^\\* decline ~verb~$" :reference dictionary :at "\\* decline ~verb~\n"
+               :lines ("^   Etymology: see \\[\\[mw-thesaurus-entry:decline:1\\]\\[verb\\]\\]$")
+               :lookups 1))
+     ;; The verb is the third entry of the page, and its link comes after it.
+     ("C-c C-o follows a link to an entry" :text "\n" :point 1 :tags (flow)
+      :steps ((cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-prompt) (type "fast")
+              (keys "Enter") (wait-done) (eval (mw-e2e-goto-link "verb")) (keys "C-c" "C-o")
+              (pause 1))
+      :expect (:shows "^\\* fast ~adjective~$" :reference dictionary :at "\\* fast ~verb~\n"
+               :lookups 1))
      ("RET plays without a player" :text ,mw-e2e--happy :point 10 :tags (flow)
       :steps ((eval (setq mw-thesaurus-audio-player nil exec-path nil))
               (cmd "mw-thesaurus-dictionary-lookup-dwim") (wait-done)

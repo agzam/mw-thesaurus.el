@@ -402,6 +402,13 @@ Under evil the key is the remap of `evil-record-macro', as configs do it."
     (re-search-forward "\\]\\[🔊\\]\\]" nil nil n)
     (goto-char (+ 2 (match-beginning 0)))))
 
+(defun mw-e2e-goto-link (label)
+  "Put point on the first link of the page labeled LABEL, in its window."
+  (with-selected-window (get-buffer-window mw-thesaurus-buffer-name)
+    (goto-char (point-min))
+    (search-forward (concat "][" label "]]"))
+    (goto-char (+ 2 (match-beginning 0)))))
+
 (defun mw-e2e--header-line ()
   "Return the header line of the thesaurus buffer as its window shows it."
   (when-let* ((buffer (get-buffer mw-thesaurus-buffer-name))
